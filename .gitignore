@@ -1,0 +1,15 @@
+# 内部メモ・自走ログ（公開しない）
+IMPROVEMENT_LOG.md
+
+# Claude Code 設定
+.claude/
+
+# バックアップ・ローカルデータ
+*.backup
+*-backup-*.json
+lunch-order-backup-*.json
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

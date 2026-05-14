@@ -1,0 +1,2744 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="auto">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#C53A28" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1a1612" media="(prefers-color-scheme: dark)">
+<meta name="description" content="お弁当の注文取りまとめが、3タップで終わる。職場のお昼を、もっと楽しく。">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="お昼の注文">
+<title>お昼の注文 ‧ お弁当取りまとめ</title>
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='28' fill='%23C53A28'/><text x='32' y='44' font-size='32' text-anchor='middle' fill='white' font-family='serif'>食</text></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='40' fill='%23C53A28'/><text x='90' y='128' font-size='110' text-anchor='middle' fill='white' font-family='serif'>食</text></svg>">
+
+<link rel="manifest" href='data:application/manifest+json,{"name":"お昼の注文","short_name":"お昼","start_url":"./","display":"standalone","background_color":"%23f3eada","theme_color":"%23C53A28","icons":[{"src":"data:image/svg+xml,<svg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 192 192%27><rect width=%27192%27 height=%27192%27 fill=%27%23C53A28%27/><text x=%2796%27 y=%27138%27 font-size=%27120%27 text-anchor=%27middle%27 fill=%27white%27 font-family=%27serif%27>食</text></svg>","sizes":"192x192","type":"image/svg+xml"}]}'>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Yuji+Syuku&family=Shippori+Mincho+B1:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=DotGothic16&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js" defer></script>
+
+<style>
+/* ============================================================
+   お昼の注文  v2.2  Commercial-grade
+   ============================================================ */
+:root, [data-theme="light"] {
+  --washi:        #f3eada;
+  --washi-warm:   #faf3e1;
+  --paper:        #ffffff;
+  --paper-2:      #fbf6ec;
+  --sumi:         #1f1a14;
+  --sumi-soft:    #4a4135;
+  --sumi-faded:   #8a7e6c;
+  --line:         #d9cdb3;
+  --line-soft:    #ece2cc;
+  --shu:          #c53a28;
+  --shu-deep:     #9b2718;
+  --shu-soft:     #f8e8e3;
+  --shu-glow:     rgba(197,58,40,.18);
+  --karashi:      #d4a017;
+  --karashi-soft: #fff7d8;
+  --wakatake:     #5c8048;
+  --wakatake-soft:#e3efd9;
+  --ai:           #2a4a5c;
+  --aka:          #b22222;
+  --shadow-card:  0 1px 0 rgba(31,26,20,.04), 0 6px 18px -10px rgba(31,26,20,.18);
+  --shadow-soft:  0 2px 8px rgba(31,26,20,.08);
+  --shadow-pop:   0 12px 40px -8px rgba(31,26,20,.35);
+  --modal-bg:     rgba(31,26,20,.55);
+}
+[data-theme="dark"] {
+  --washi:        #1a1612;
+  --washi-warm:   #211c16;
+  --paper:        #2a241d;
+  --paper-2:      #322a22;
+  --sumi:         #f0e6d4;
+  --sumi-soft:    #c4b89e;
+  --sumi-faded:   #837866;
+  --line:         #3d352b;
+  --line-soft:    #2f2a22;
+  --shu:          #e85a45;
+  --shu-deep:     #c53a28;
+  --shu-soft:     #3a201c;
+  --shu-glow:     rgba(232,90,69,.28);
+  --karashi:      #e8b832;
+  --karashi-soft: #3a3019;
+  --wakatake:     #8aae6f;
+  --wakatake-soft:#2a3422;
+  --ai:           #6b8ca0;
+  --aka:          #e95650;
+  --shadow-card:  0 1px 0 rgba(0,0,0,.3), 0 8px 22px -10px rgba(0,0,0,.6);
+  --shadow-soft:  0 2px 8px rgba(0,0,0,.4);
+  --shadow-pop:   0 12px 40px -8px rgba(0,0,0,.7);
+  --modal-bg:     rgba(0,0,0,.7);
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] {
+    --washi:#1a1612; --washi-warm:#211c16; --paper:#2a241d; --paper-2:#322a22;
+    --sumi:#f0e6d4; --sumi-soft:#c4b89e; --sumi-faded:#837866;
+    --line:#3d352b; --line-soft:#2f2a22;
+    --shu:#e85a45; --shu-deep:#c53a28; --shu-soft:#3a201c; --shu-glow:rgba(232,90,69,.28);
+    --karashi:#e8b832; --karashi-soft:#3a3019;
+    --wakatake:#8aae6f; --wakatake-soft:#2a3422;
+    --ai:#6b8ca0; --aka:#e95650;
+    --shadow-card:0 1px 0 rgba(0,0,0,.3),0 8px 22px -10px rgba(0,0,0,.6);
+    --shadow-soft:0 2px 8px rgba(0,0,0,.4);
+    --shadow-pop:0 12px 40px -8px rgba(0,0,0,.7);
+    --modal-bg:rgba(0,0,0,.7);
+  }
+}
+
+:root {
+  --display: "Yuji Syuku", "Shippori Mincho B1", serif;
+  --serif:   "Shippori Mincho B1", "Hiragino Mincho ProN", serif;
+  --gothic:  "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+  --mono:    "DotGothic16", monospace;
+  --tap: 48px;
+  --radius: 12px;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--gothic);
+  background: var(--washi);
+  color: var(--sumi);
+  font-size: 16px;
+  line-height: 1.6;
+  padding-bottom: calc(40px + env(safe-area-inset-bottom));
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
+  font-feature-settings: "palt";
+  transition: background-color .25s, color .25s;
+}
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  pointer-events: none; z-index: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='0.92' numOctaves='2'/><feColorMatrix values='0 0 0 0 0.1  0 0 0 0 0.08  0 0 0 0 0.05  0 0 0 0 0.07'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  opacity: .85;
+  mix-blend-mode: multiply;
+}
+[data-theme="dark"] body::before, [data-theme="auto"] body::before { mix-blend-mode: screen; opacity: .35; }
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] body::before { mix-blend-mode: screen; opacity: .35; }
+}
+
+main { position: relative; z-index: 1; }
+
+/* ============================================================
+   ヘッダー
+   ============================================================ */
+.header {
+  position: sticky; top: 0; z-index: 50;
+  padding-top: env(safe-area-inset-top);
+  background: var(--shu);
+  color: #fff8e7;
+  box-shadow: 0 2px 10px -2px rgba(0,0,0,.18);
+}
+.header-inner {
+  max-width: 720px; margin: 0 auto;
+  padding: 10px 14px 12px;
+  display: flex; align-items: center; gap: 12px;
+}
+.header-mark {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: #fff8e7; color: var(--shu);
+  display: grid; place-items: center;
+  font-family: var(--display); font-size: 22px;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,.1);
+  animation: hankoIn .6s cubic-bezier(.2,1.5,.3,1) both;
+}
+@keyframes hankoIn {
+  from { transform: scale(0) rotate(-30deg); opacity: 0; }
+  to   { transform: scale(1) rotate(0); opacity: 1; }
+}
+.header-title {
+  font-family: var(--gothic); font-size: 17px; font-weight: 700;
+  letter-spacing: .08em; margin: 0; line-height: 1.2;
+}
+.header-sub { font-size: 11px; opacity: .85; letter-spacing: .15em; margin-top: 1px; }
+.header-status {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 8px;
+}
+.online-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #6fe06f;
+  box-shadow: 0 0 0 0 rgba(111,224,111,.6);
+  animation: onlinePulse 2s infinite;
+}
+.online-dot.offline { background: #999; animation: none; box-shadow: none; }
+@keyframes onlinePulse { 0%,100%{box-shadow:0 0 0 0 rgba(111,224,111,.6);} 50%{box-shadow:0 0 0 5px rgba(111,224,111,0);} }
+.header-icon-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.3);
+  color: #fff8e7;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0;
+  transition: background .15s;
+}
+.header-icon-btn:active { background: rgba(255,255,255,.15); }
+
+.header-date {
+  font-size: 11px; letter-spacing: .08em;
+  text-align: right; opacity: .9;
+  white-space: nowrap; line-height: 1.3;
+}
+.header::after {
+  content: ""; display: block; height: 6px;
+  background: var(--shu);
+  background-image: repeating-linear-gradient(90deg,
+    var(--shu) 0, var(--shu) calc(16.66% - 1px),
+    rgba(0,0,0,.18) calc(16.66% - 1px), rgba(0,0,0,.18) 16.66%);
+  -webkit-mask: linear-gradient(180deg, #000, transparent); mask: linear-gradient(180deg, #000, transparent);
+}
+
+/* ============================================================
+   タブ
+   ============================================================ */
+.tabs {
+  position: sticky;
+  top: calc(env(safe-area-inset-top) + 64px);
+  z-index: 40;
+  background: var(--washi);
+  border-bottom: 1px solid var(--line);
+  padding: 6px 8px 0;
+  backdrop-filter: blur(10px);
+}
+.tabs-row {
+  max-width: 720px; margin: 0 auto;
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 4px;
+}
+.tab {
+  background: transparent; border: none;
+  padding: 11px 4px 9px;
+  font-family: var(--gothic);
+  font-size: 13.5px; font-weight: 700;
+  color: var(--sumi-faded); cursor: pointer;
+  border-bottom: 3px solid transparent;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  min-height: var(--tap);
+  transition: color .15s, border-color .15s;
+  position: relative;
+}
+.tab .tab-icon {
+  font-family: var(--display); font-size: 17px;
+  color: var(--sumi-faded); line-height: 1; margin-bottom: 1px;
+  transition: color .15s, transform .25s;
+}
+.tab.active { color: var(--sumi); border-bottom-color: var(--shu); }
+.tab.active .tab-icon { color: var(--shu); transform: scale(1.15); }
+.tab .tab-badge {
+  position: absolute;
+  top: 6px; right: calc(50% - 22px);
+  background: var(--shu); color: #fff;
+  font-size: 9px; font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 8px;
+  letter-spacing: 0;
+  display: none;
+}
+.tab .tab-badge.show { display: inline-block; }
+
+/* ============================================================
+   メイン
+   ============================================================ */
+main { max-width: 720px; margin: 0 auto; padding: 14px 14px 0; }
+.view { display: none; animation: fadeUp .25s ease both; }
+.view.active { display: block; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(6px);} to{opacity:1;transform:translateY(0);} }
+
+/* ============================================================
+   カード
+   ============================================================ */
+.card {
+  background: var(--paper);
+  border-radius: var(--radius);
+  padding: 16px 16px 18px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--line-soft);
+}
+.section-title {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 12px;
+  font-size: 15px; font-weight: 700;
+  color: var(--sumi); letter-spacing: .04em;
+}
+.section-title .deco {
+  font-family: var(--display);
+  font-size: 18px; color: var(--shu); line-height: 1; margin-right: 2px;
+}
+.section-title .count {
+  margin-left: auto; font-size: 12px; font-weight: 700;
+  background: var(--shu-soft); color: var(--shu);
+  padding: 2px 9px; border-radius: 10px;
+}
+.section-title .right { margin-left: auto; }
+
+/* ============================================================
+   今日のお昼（リビール）
+   ============================================================ */
+.todays-pick {
+  position: relative;
+  margin-bottom: 14px;
+  padding: 22px 18px 24px;
+  background: linear-gradient(180deg, var(--paper-2) 0%, var(--washi-warm) 100%);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  animation: pop .4s cubic-bezier(.2,1.3,.4,1);
+}
+[data-theme="dark"] .todays-pick, [data-theme="auto"] .todays-pick {
+  background: linear-gradient(180deg, #3a2f24 0%, #2a241d 100%);
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] .todays-pick { background: linear-gradient(180deg, #3a2f24 0%, #2a241d 100%); }
+}
+@keyframes pop { from{transform:scale(.96);opacity:0;} to{transform:scale(1);opacity:1;} }
+.todays-pick .label { font-size: 11px; letter-spacing: .3em; color: var(--sumi-faded); text-align: center; margin-bottom: 8px; }
+.todays-pick .name {
+  font-family: var(--display);
+  font-size: 36px; line-height: 1.2; letter-spacing: .04em;
+  color: var(--sumi); text-align: center;
+  margin: 4px 0 8px; word-break: break-word;
+}
+.todays-pick .meta { text-align: center; font-size: 13px; color: var(--sumi-soft); }
+.todays-pick .meta .price {
+  display: inline-block; margin-left: 6px;
+  font-weight: 700; color: var(--sumi);
+}
+.todays-pick .hanko {
+  position: absolute; right: 12px; top: 12px;
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--shu);
+  background: var(--shu); color: #fff8e7;
+  font-family: var(--display); font-size: 16px;
+  display: grid; place-items: center; line-height: 1;
+  transform: rotate(8deg);
+  box-shadow: inset 0 0 0 3px var(--shu), inset 0 0 0 4px rgba(255,248,231,.5), inset 0 0 0 6px var(--shu);
+  opacity: .92;
+  animation: hankoStamp .55s cubic-bezier(.2,1.5,.3,1) both;
+}
+@keyframes hankoStamp {
+  0% { transform: scale(2.4) rotate(-15deg); opacity: 0; }
+  50%{ transform: scale(.95) rotate(8deg); opacity: 1; }
+  100%{ transform: scale(1) rotate(8deg); opacity: .92; }
+}
+
+/* ============================================================
+   ボタン
+   ============================================================ */
+.btn {
+  font-family: var(--gothic);
+  font-size: 16px; font-weight: 700; letter-spacing: .04em;
+  cursor: pointer; border: none;
+  padding: 14px 18px; width: 100%;
+  border-radius: 10px;
+  min-height: var(--tap);
+  transition: transform .08s, opacity .15s, background .15s, box-shadow .15s;
+  box-shadow: 0 2px 0 rgba(0,0,0,.08);
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,.08); }
+.btn:disabled { opacity: .35; cursor: not-allowed; }
+.btn:disabled:active { transform: none; }
+.btn-primary { background: var(--shu); color: #fff; }
+.btn-primary:hover { background: var(--shu-deep); box-shadow: 0 4px 14px var(--shu-glow); }
+.btn-ghost { background: var(--paper); color: var(--sumi); border: 1.5px solid var(--line); box-shadow: none; }
+.btn-ghost:hover { background: var(--washi-warm); border-color: var(--sumi-faded); }
+.btn-danger { background: var(--paper); color: var(--aka); border: 1.5px solid var(--aka); box-shadow: none; }
+.btn-success { background: var(--wakatake); color: #fff; }
+.btn-small { padding: 9px 14px; font-size: 14px; min-height: 40px; }
+.btn-tiny { padding: 6px 10px; font-size: 12px; min-height: 32px; border-radius: 8px; }
+.btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btn-row.three { grid-template-columns: 1fr 1fr 1fr; }
+
+.icon-btn {
+  background: transparent; border: 1.5px solid var(--line);
+  width: 36px; height: 36px; border-radius: 50%;
+  display: inline-grid; place-items: center;
+  cursor: pointer; color: var(--sumi); font-size: 16px; padding: 0;
+  transition: background .15s, transform .15s;
+}
+.icon-btn:hover { background: var(--washi-warm); }
+.icon-btn:active { transform: rotate(-180deg); }
+
+/* ============================================================
+   フォーム
+   ============================================================ */
+.field { margin-bottom: 12px; }
+.field-label {
+  display: flex; align-items: baseline; gap: 6px;
+  font-size: 13px; font-weight: 700; color: var(--sumi);
+  margin-bottom: 6px;
+}
+.field-label .opt { margin-left: auto; font-weight: 400; color: var(--sumi-faded); font-size: 11px; }
+.field-label .req {
+  color: var(--shu); font-size: 11px;
+  background: var(--shu-soft); padding: 1px 6px;
+  border-radius: 8px; font-weight: 700;
+}
+input[type="text"], input[type="number"], input[type="datetime-local"], input[type="url"], input[type="time"], select, textarea {
+  font-family: var(--gothic); font-size: 16px;
+  padding: 12px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px; width: 100%;
+  background: var(--paper);
+  color: var(--sumi);
+  -webkit-appearance: none; appearance: none;
+  min-height: var(--tap);
+  transition: border-color .15s, box-shadow .15s;
+}
+input::placeholder { color: var(--sumi-faded); font-family: var(--gothic); }
+input:focus, select:focus { outline: none; border-color: var(--shu); box-shadow: 0 0 0 3px var(--shu-glow); }
+
+/* スイッチ */
+.switch { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; gap: 10px; }
+.switch-label { font-size: 14px; color: var(--sumi); flex: 1; }
+.switch-label small { display: block; font-size: 11px; color: var(--sumi-faded); margin-top: 2px; line-height: 1.5; }
+.switch-toggle {
+  position: relative; width: 46px; height: 26px;
+  background: var(--line); border-radius: 13px;
+  cursor: pointer; flex-shrink: 0;
+  transition: background .2s;
+}
+.switch-toggle::after {
+  content: ""; position: absolute;
+  top: 3px; left: 3px;
+  width: 20px; height: 20px;
+  background: #fff; border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+  transition: transform .2s;
+}
+.switch-toggle.on { background: var(--shu); }
+.switch-toggle.on::after { transform: translateX(20px); }
+
+/* ============================================================
+   メニュー一覧
+   ============================================================ */
+.menu-list { list-style: none; padding: 0; margin: 0; }
+.menu-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 6px 12px 0;
+  border-bottom: 1px solid var(--line-soft);
+  cursor: pointer; min-height: 56px;
+  transition: background .15s;
+}
+.menu-item:last-child { border-bottom: none; }
+.menu-item:active { background: var(--washi-warm); }
+.menu-item .body { flex: 1; min-width: 0; }
+.menu-item .name {
+  font-size: 16px; font-weight: 500; color: var(--sumi);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.menu-item .name .text { flex-shrink: 1; min-width: 0; word-break: break-word; }
+.menu-item .name .price { font-size: 14px; font-weight: 700; color: var(--sumi); white-space: nowrap; }
+.menu-item .name .price::before { content: "¥"; opacity: .55; margin-right: 1px; }
+.menu-item .shop { font-size: 12px; color: var(--sumi-faded); margin-top: 2px; }
+.menu-item.selected {
+  background: var(--shu-soft);
+  border-radius: 10px;
+  padding-left: 12px; padding-right: 12px;
+  border-bottom-color: transparent;
+  position: relative;
+}
+.menu-item.selected::after { content: "✓"; font-size: 22px; color: var(--shu); font-weight: 700; }
+.menu-item .del {
+  flex-shrink: 0; background: transparent; border: none;
+  color: var(--sumi-faded); cursor: pointer;
+  padding: 8px; font-size: 18px; border-radius: 8px;
+  width: 36px; height: 36px;
+  display: grid; place-items: center;
+}
+.menu-item .del:hover { background: var(--washi-warm); color: var(--aka); }
+.menu-item.pickable .del { display: none; }
+
+/* ============================================================
+   履歴・リスト
+   ============================================================ */
+.history-list { list-style: none; padding: 0; margin: 0; }
+.history-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 14px;
+}
+.history-item:last-child { border-bottom: none; }
+.history-item .date { color: var(--sumi-faded); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.history-item .name { flex: 1; min-width: 0; word-break: break-word; }
+.history-item .badge {
+  font-size: 10px; background: var(--shu-soft); color: var(--shu);
+  padding: 1px 6px; border-radius: 8px; font-weight: 700; white-space: nowrap;
+}
+.history-item .badge.gray { background: var(--line-soft); color: var(--sumi-faded); }
+.history-item .badge.green { background: var(--wakatake-soft); color: var(--wakatake); }
+
+/* ============================================================
+   空状態
+   ============================================================ */
+.empty { text-align: center; padding: 28px 16px 22px; color: var(--sumi-faded); }
+.empty-art {
+  font-family: var(--display);
+  font-size: 38px; color: var(--shu); opacity: .5;
+  margin-bottom: 6px; line-height: 1;
+}
+.empty-msg { font-size: 14px; line-height: 1.7; }
+
+/* ============================================================
+   ルーレット
+   ============================================================ */
+.roulette-box {
+  display: none;
+  background: var(--sumi); color: #fff8e7;
+  border-radius: 12px;
+  padding: 22px 16px;
+  margin-bottom: 14px; text-align: center;
+  position: relative; overflow: hidden;
+}
+.roulette-box.on { display: block; animation: pop .25s ease; }
+.roulette-label { font-size: 11px; letter-spacing: .3em; opacity: .8; margin-bottom: 10px; }
+.roulette-text { font-family: var(--display); font-size: 28px; letter-spacing: .04em; min-height: 1.4em; }
+.roulette-text.spinning { animation: rouletteShake .07s infinite linear; filter: blur(.3px); }
+.roulette-text.done {
+  font-size: 32px; color: #ffd590;
+  text-shadow: 0 0 18px rgba(255,180,80,.5);
+  animation: revealPop .5s cubic-bezier(.2,1.5,.4,1);
+}
+@keyframes rouletteShake { 0%{transform:translateY(-2px);} 50%{transform:translateY(2px);} 100%{transform:translateY(-2px);} }
+@keyframes revealPop { 0%{transform:scale(.7);opacity:0;} 100%{transform:scale(1);opacity:1;} }
+
+/* ============================================================
+   折りたたみ
+   ============================================================ */
+details { margin-top: 12px; border-top: 1px solid var(--line-soft); padding-top: 12px; }
+summary {
+  cursor: pointer; font-weight: 700; font-size: 14px;
+  color: var(--sumi); list-style: none;
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0; min-height: 36px;
+}
+summary::-webkit-details-marker { display: none; }
+summary::before {
+  content: "＋";
+  display: inline-grid; place-items: center;
+  width: 26px; height: 26px;
+  background: var(--shu); color: #fff;
+  border-radius: 50%; font-size: 16px; font-weight: 700;
+  transition: transform .25s; line-height: 1;
+}
+details[open] summary::before { content: "−"; }
+.details-body { padding-top: 10px; }
+
+/* ============================================================
+   役割選択
+   ============================================================ */
+.role-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.role-card {
+  background: var(--paper);
+  border: 1.5px solid var(--line); border-radius: 12px;
+  padding: 16px 10px 14px;
+  cursor: pointer; text-align: center;
+  min-height: 92px;
+  transition: border-color .15s, background .15s, transform .1s;
+}
+.role-card:active { transform: scale(.97); }
+.role-card.active { border-color: var(--shu); background: var(--shu-soft); }
+.role-card .role-icon { font-family: var(--display); font-size: 26px; color: var(--shu); line-height: 1; margin-bottom: 6px; }
+.role-card .role-name { font-weight: 700; font-size: 14px; color: var(--sumi); }
+.role-card .role-sub { font-size: 11px; color: var(--sumi-faded); margin-top: 2px; }
+
+/* ============================================================
+   通知系（バナー）
+   ============================================================ */
+.notice {
+  background: var(--karashi-soft);
+  border: 1.5px solid var(--karashi);
+  border-radius: 12px;
+  padding: 18px 16px;
+  text-align: center;
+  margin-bottom: 14px;
+}
+.notice h3 { margin: 0 0 6px; font-size: 16px; font-weight: 700; color: var(--sumi); }
+.notice p { margin: 0 0 12px; font-size: 13px; color: var(--sumi-soft); line-height: 1.7; }
+
+.banner {
+  background: var(--wakatake-soft);
+  border-left: 4px solid var(--wakatake);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--sumi);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.banner.warn { background: var(--karashi-soft); border-color: var(--karashi); }
+.banner.error { background: var(--shu-soft); border-color: var(--shu); }
+.banner .ic { font-size: 18px; }
+
+/* ============================================================
+   共有URL ＆ QR
+   ============================================================ */
+.share-box {
+  background: var(--washi-warm); color: var(--sumi);
+  font-family: var(--mono); font-size: 12px; letter-spacing: .02em;
+  padding: 12px 14px; border-radius: 10px;
+  word-break: break-all; margin: 12px 0 8px;
+  border: 1px dashed var(--sumi-faded);
+}
+.qr-wrap {
+  background: #fff;
+  border: 1px solid var(--line);
+  padding: 12px;
+  border-radius: 12px;
+  display: grid; place-items: center;
+  margin: 12px auto 8px;
+  width: fit-content;
+}
+.qr-wrap canvas { display: block; }
+.qr-caption { text-align: center; font-size: 11px; color: var(--sumi-faded); margin-top: -4px; }
+
+/* ============================================================
+   ステータス
+   ============================================================ */
+.status {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 700;
+  padding: 3px 9px; border-radius: 10px;
+  letter-spacing: .04em;
+}
+.status.open { background: var(--wakatake-soft); color: var(--wakatake); }
+.status.open::before { content: "●"; animation: pulse 1.4s infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+.status.closed { background: var(--line-soft); color: var(--sumi-faded); }
+.status.sent { background: var(--shu-soft); color: var(--shu); }
+.status.warn { background: var(--karashi-soft); color: var(--karashi); }
+
+.countdown {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--sumi);
+  font-variant-numeric: tabular-nums;
+}
+.countdown.urgent { color: var(--shu); font-weight: 700; }
+
+/* ============================================================
+   レシート（発注控え）
+   ============================================================ */
+.receipt {
+  font-family: var(--mono);
+  font-size: 14px; line-height: 2; color: var(--sumi);
+}
+.receipt .r-row { display: flex; justify-content: space-between; gap: 8px; }
+.receipt .r-row.total {
+  margin-top: 6px; padding-top: 8px;
+  border-top: 1px dashed var(--sumi);
+  font-weight: 700; font-size: 16px;
+}
+.receipt .r-row .qty { color: var(--shu); font-weight: 700; }
+
+/* ============================================================
+   トースト ＆ フラッシュ
+   ============================================================ */
+.toast {
+  position: fixed;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  background: var(--sumi); color: var(--washi);
+  font-size: 14px; font-weight: 500;
+  padding: 11px 18px; border-radius: 24px;
+  box-shadow: 0 8px 22px rgba(0,0,0,.25);
+  opacity: 0; transition: opacity .2s, transform .2s;
+  pointer-events: none; z-index: 999;
+  max-width: 88vw; text-align: center;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.error { background: var(--aka); color: #fff; }
+
+.success-flash {
+  position: fixed; inset: 0;
+  display: grid; place-items: center;
+  z-index: 998; pointer-events: none;
+  background: rgba(243,234,218,0); transition: background .25s;
+}
+[data-theme="dark"] .success-flash, [data-theme="auto"] .success-flash {
+  background: rgba(26,22,18,0);
+}
+.success-flash.on { pointer-events: all; background: rgba(243,234,218,.92); }
+[data-theme="dark"] .success-flash.on, [data-theme="auto"] .success-flash.on {
+  background: rgba(26,22,18,.85);
+}
+.success-flash .stamp {
+  font-family: var(--display); font-size: 90px;
+  color: var(--shu);
+  border: 6px solid var(--shu);
+  border-radius: 50%;
+  width: 170px; height: 170px;
+  display: grid; place-items: center;
+  background: rgba(255,248,231,.5);
+  transform: scale(0) rotate(-20deg); opacity: 0;
+}
+.success-flash.on .stamp { animation: stampDown .55s cubic-bezier(.2,1.6,.3,1) forwards; }
+@keyframes stampDown {
+  0%   { transform: scale(2.2) rotate(-20deg); opacity: 0; }
+  50%  { transform: scale(1) rotate(8deg); opacity: 1; }
+  100% { transform: scale(1) rotate(8deg); opacity: 1; }
+}
+/* 紙吹雪 */
+.confetti { position: fixed; pointer-events: none; z-index: 997; }
+.confetti i {
+  position: absolute; top: -10px;
+  width: 8px; height: 14px;
+  display: block; opacity: 0;
+  animation: confettiFall 1.6s cubic-bezier(.4,.6,.6,1) forwards;
+}
+@keyframes confettiFall {
+  0%   { opacity: 1; transform: translateY(-20px) rotate(0); }
+  100% { opacity: 0; transform: translateY(100vh) rotate(720deg); }
+}
+
+/* ============================================================
+   モーダル
+   ============================================================ */
+.modal-bg {
+  position: fixed; inset: 0;
+  background: var(--modal-bg);
+  display: none; z-index: 1000;
+  padding: 24px 14px;
+  overflow-y: auto;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+.modal-bg.on { display: flex; animation: fadeUp .2s; }
+.modal {
+  background: var(--paper); color: var(--sumi);
+  border-radius: 16px;
+  max-width: 460px; width: 100%;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  box-shadow: var(--shadow-pop);
+  animation: modalIn .3s cubic-bezier(.2,1.3,.4,1);
+  border: 1px solid var(--line);
+}
+@keyframes modalIn { from{transform:scale(.93) translateY(20px); opacity:0;} to{transform:scale(1) translateY(0); opacity:1;} }
+.modal-header {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; background: var(--paper); z-index: 1; border-radius: 16px 16px 0 0;
+}
+.modal-header h2 {
+  margin: 0; font-size: 16px; font-weight: 700;
+  display: flex; align-items: center; gap: 8px;
+}
+.modal-header h2 .deco { font-family: var(--display); font-size: 20px; color: var(--shu); line-height: 1; }
+.modal-close {
+  background: transparent; border: none;
+  width: 32px; height: 32px; border-radius: 50%;
+  cursor: pointer; font-size: 18px; color: var(--sumi-faded);
+  display: grid; place-items: center;
+}
+.modal-close:hover { background: var(--washi-warm); color: var(--sumi); }
+.modal-body { padding: 18px; }
+.modal-footer {
+  padding: 14px 18px;
+  border-top: 1px solid var(--line-soft);
+  position: sticky; bottom: 0; background: var(--paper); border-radius: 0 0 16px 16px;
+}
+
+/* オンボーディング */
+.onboarding-step { padding: 10px 0; min-height: 280px; }
+.onboarding-step .ob-art {
+  font-family: var(--display); font-size: 80px;
+  color: var(--shu); text-align: center; line-height: 1;
+  margin-bottom: 10px;
+}
+.onboarding-step h3 {
+  text-align: center; font-size: 18px; margin: 0 0 12px; font-weight: 700;
+}
+.onboarding-step p { font-size: 14px; line-height: 1.8; color: var(--sumi-soft); margin: 0 0 10px; }
+.ob-dots { display: flex; gap: 6px; justify-content: center; margin-top: 12px; }
+.ob-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--line);
+  transition: background .2s, width .2s;
+}
+.ob-dot.active { background: var(--shu); width: 22px; border-radius: 4px; }
+
+/* ヘルプ */
+.help {
+  font-size: 13px; color: var(--sumi-soft);
+  background: var(--washi-warm); border-left: 3px solid var(--shu);
+  padding: 10px 12px; border-radius: 6px;
+  margin-top: 8px; line-height: 1.7;
+}
+.help ol { margin: 4px 0 0; padding-left: 22px; }
+.help code {
+  background: var(--sumi); color: var(--washi);
+  padding: 1px 5px; border-radius: 4px;
+  font-family: var(--mono); font-size: 12px;
+}
+.help-block { margin-bottom: 14px; }
+.help-block h4 { margin: 0 0 4px; font-size: 13px; font-weight: 700; color: var(--sumi); display: flex; align-items: center; gap: 6px; }
+.help-block h4::before { content: "▸"; color: var(--shu); }
+.help-block p { margin: 0; font-size: 13px; color: var(--sumi-soft); line-height: 1.7; }
+
+/* テンプレートチップ */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--washi-warm); color: var(--sumi);
+  border: 1px solid var(--line);
+  padding: 5px 10px; border-radius: 14px;
+  font-size: 12px; font-weight: 500;
+  cursor: pointer; transition: background .15s;
+}
+.chip:hover { background: var(--shu-soft); border-color: var(--shu); color: var(--shu); }
+.chip .chip-x {
+  margin-left: 4px; opacity: .5;
+  width: 14px; height: 14px; display: inline-grid; place-items: center;
+  border-radius: 50%; background: rgba(0,0,0,.06);
+  font-size: 11px;
+}
+.chip .chip-x:hover { background: var(--shu); color: #fff; opacity: 1; }
+.chip.add { border-style: dashed; color: var(--sumi-faded); }
+
+/* 統計 */
+.stat-grid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px; margin-bottom: 12px;
+}
+.stat-card {
+  background: var(--washi-warm);
+  border-radius: 10px;
+  padding: 10px 8px;
+  text-align: center;
+  border: 1px solid var(--line-soft);
+}
+.stat-card .stat-num {
+  font-family: var(--display);
+  font-size: 26px; color: var(--shu); line-height: 1.1;
+}
+.stat-card .stat-label { font-size: 10px; color: var(--sumi-faded); margin-top: 2px; letter-spacing: .08em; }
+
+.ranking-list { list-style: none; padding: 0; margin: 8px 0 0; }
+.ranking-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px dotted var(--line-soft);
+  font-size: 14px;
+}
+.ranking-item:last-child { border: none; }
+.ranking-item .rank {
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: var(--washi-warm);
+  color: var(--sumi-faded);
+  font-size: 11px; font-weight: 700;
+  flex-shrink: 0;
+}
+.ranking-item:nth-child(1) .rank { background: #f5d76e; color: var(--sumi); }
+.ranking-item:nth-child(2) .rank { background: #d8d8d8; color: var(--sumi); }
+.ranking-item:nth-child(3) .rank { background: #d2a07a; color: #fff; }
+.ranking-item .name { flex: 1; }
+.ranking-item .bar {
+  flex-shrink: 0; height: 6px; background: var(--shu); border-radius: 3px;
+  min-width: 8px; opacity: .7;
+}
+.ranking-item .cnt { color: var(--sumi-faded); font-size: 12px; font-variant-numeric: tabular-nums; min-width: 30px; text-align: right; }
+
+/* 仕上げ */
+.muted { color: var(--sumi-faded); font-size: 13px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row2 > .full { grid-column: 1 / -1; }
+.footer {
+  text-align: center; font-size: 11px;
+  color: var(--sumi-faded); padding: 24px 12px 8px;
+}
+.divider {
+  display: flex; align-items: center; gap: 10px;
+  margin: 14px 0;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .35em;
+  color: var(--sumi-faded);
+}
+.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+/* セッション履歴行 */
+.session-card {
+  background: var(--washi-warm);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.session-card:hover { border-color: var(--shu); }
+.session-card .sc-top {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+}
+.session-card .sc-shop { font-weight: 700; font-size: 14px; color: var(--sumi); }
+.session-card .sc-date { font-size: 11px; color: var(--sumi-faded); white-space: nowrap; }
+.session-card .sc-meta { font-size: 12px; color: var(--sumi-soft); margin-top: 2px; }
+
+/* PC */
+@media (min-width: 600px) {
+  .todays-pick .name { font-size: 44px; }
+}
+
+/* 印刷 */
+@media print {
+  body { background: #fff; color: #000; padding: 0; }
+  body::before, .header, .tabs, .toast, .modal-bg, .icon-btn, .btn, details, .header-status { display: none !important; }
+  main { max-width: none; padding: 20mm; }
+  .view { display: block !important; }
+  .view:not(.print-target) { display: none !important; }
+  .card { border: 1px solid #000; box-shadow: none; page-break-inside: avoid; }
+  .receipt { font-size: 14px; }
+  .print-only { display: block !important; }
+  .section-title .deco, .empty, .role-pick, .field, .share-box, .qr-wrap { display: none !important; }
+}
+.print-only { display: none; }
+
+/* スケルトン */
+.skeleton {
+  background: linear-gradient(90deg, var(--line-soft) 25%, var(--washi-warm) 50%, var(--line-soft) 75%);
+  background-size: 200% 100%;
+  animation: skeleton 1.4s linear infinite;
+  border-radius: 6px; height: 14px; margin: 6px 0;
+}
+@keyframes skeleton { from{background-position:200% 0;} to{background-position:-200% 0;} }
+</style>
+</head>
+<body>
+
+<!-- ヘッダー -->
+<header class="header">
+  <div class="header-inner">
+    <div class="header-mark">食</div>
+    <div style="min-width:0;flex:1;">
+      <h1 class="header-title">お昼の注文</h1>
+      <div class="header-sub">うらやす市役所 ‧ お弁当取りまとめ</div>
+    </div>
+    <div class="header-status">
+      <span class="online-dot" id="online-dot" title="オンライン"></span>
+      <button class="header-icon-btn" id="btn-help" title="ヘルプ" aria-label="ヘルプ">?</button>
+    </div>
+    <div class="header-date" id="today-date"></div>
+  </div>
+</header>
+
+<!-- タブ -->
+<nav class="tabs">
+  <div class="tabs-row">
+    <button class="tab active" data-mode="solo">
+      <span class="tab-icon">独</span>自分用
+    </button>
+    <button class="tab" data-mode="group">
+      <span class="tab-icon">皆</span>みんなで
+      <span class="tab-badge" id="group-badge">●</span>
+    </button>
+    <button class="tab" data-mode="settings">
+      <span class="tab-icon">設</span>設定
+    </button>
+  </div>
+</nav>
+
+<main>
+
+  <!-- ============================================================
+       自分用
+       ============================================================ -->
+  <section class="view active" id="view-solo">
+
+    <div id="solo-pick-result"></div>
+
+    <div class="card">
+      <div class="section-title"><span class="deco">択</span>今日のお昼を決める</div>
+      <button class="btn btn-primary" id="btn-pick">お昼を決める</button>
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="btn btn-ghost" id="btn-roulette">🎰 ルーレット</button>
+        <button class="btn btn-ghost" id="btn-different">前回と違うのに</button>
+      </div>
+    </div>
+
+    <div class="roulette-box" id="roulette-box">
+      <div class="roulette-label">ルーレット中…</div>
+      <div class="roulette-text" id="roulette">　</div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">
+        <span class="deco">品</span>お気に入りメニュー
+        <span class="count" id="solo-count">0</span>
+      </div>
+      <ul class="menu-list" id="solo-menu-list"></ul>
+      <details>
+        <summary>メニューを追加する</summary>
+        <div class="details-body">
+          <div class="field"><div class="field-label">品名 <span class="req">必須</span></div>
+            <input type="text" id="solo-add-name" placeholder="例：幕の内弁当" maxlength="40"></div>
+          <div class="field"><div class="field-label">お店 <span class="opt">任意</span></div>
+            <input type="text" id="solo-add-shop" placeholder="例：〇〇弁当店" maxlength="30"></div>
+          <div class="field"><div class="field-label">価格（円） <span class="opt">任意</span></div>
+            <input type="number" id="solo-add-price" inputmode="numeric" placeholder="例：650" min="0" max="99999"></div>
+          <button class="btn btn-primary" id="btn-solo-add">追加する</button>
+        </div>
+      </details>
+    </div>
+
+    <div class="card" id="solo-stats-card" style="display:none;">
+      <div class="section-title"><span class="deco">統</span>ランチ統計（直近30日）</div>
+      <div class="stat-grid" id="solo-stats"></div>
+      <div class="muted" style="font-size:12px;margin-top:8px;">よく選んだメニュー</div>
+      <ul class="ranking-list" id="solo-ranking"></ul>
+    </div>
+
+    <div class="card">
+      <div class="section-title">
+        <span class="deco">記</span>履歴
+        <button class="icon-btn right" id="btn-export-solo-history" title="CSV出力" aria-label="CSV出力">⤓</button>
+      </div>
+      <ul class="history-list" id="solo-history"></ul>
+    </div>
+
+  </section>
+
+  <!-- ============================================================
+       みんなで
+       ============================================================ -->
+  <section class="view" id="view-group">
+
+    <div id="group-not-configured" style="display:none;">
+      <div class="notice">
+        <h3>初回だけ設定が必要です</h3>
+        <p>「みんなで注文」を使うには<br>「設定」タブでサーバーのURL登録が必要です。<br>1度だけ済ませれば次回から不要です。</p>
+        <button class="btn btn-primary" onclick="switchMode('settings')">設定を開く</button>
+      </div>
+    </div>
+
+    <div id="group-main" style="display:none;">
+
+      <div class="card">
+        <div class="section-title"><span class="deco">役</span>あなたの役目を選ぶ</div>
+        <div class="role-pick">
+          <button class="role-card" data-role="organizer">
+            <div class="role-icon">取</div>
+            <div class="role-name">注文係</div>
+            <div class="role-sub">取りまとめる人</div>
+          </button>
+          <button class="role-card" data-role="member">
+            <div class="role-icon">注</div>
+            <div class="role-name">注文する人</div>
+            <div class="role-sub">お弁当を選ぶ</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- 注文係 -->
+      <div id="organizer-view" style="display:none;">
+
+        <div class="card">
+          <div class="section-title">
+            <span class="deco">品</span>今日のお弁当メニュー
+            <button class="icon-btn right" id="btn-templates" title="テンプレート" aria-label="テンプレート">📂</button>
+          </div>
+
+          <div class="chips" id="template-chips"></div>
+
+          <ul class="menu-list" id="org-menu-list"></ul>
+          <button class="btn btn-ghost" id="btn-photo-menu" style="margin-top:10px;">📷 紙のメニューを写真で取り込む</button>
+          <input type="file" id="photo-menu-input" accept="image/*" capture="environment" hidden>
+          <details>
+            <summary>手動でお弁当を追加する</summary>
+            <div class="details-body">
+              <div class="field"><div class="field-label">お弁当名 <span class="req">必須</span></div>
+                <input type="text" id="org-add-name" placeholder="例：から揚げ弁当" maxlength="40"></div>
+              <div class="row2">
+                <div class="field"><div class="field-label">価格（円） <span class="opt">任意</span></div>
+                  <input type="number" id="org-add-price" inputmode="numeric" placeholder="例：600" min="0" max="99999"></div>
+                <div class="field"><div class="field-label">数量制限 <span class="opt">任意</span></div>
+                  <input type="number" id="org-add-limit" inputmode="numeric" placeholder="例：5" min="1" max="999"></div>
+              </div>
+              <button class="btn btn-primary" id="btn-org-add">追加する</button>
+            </div>
+          </details>
+          <div style="margin-top:10px;">
+            <button class="btn btn-ghost btn-tiny" id="btn-save-template" style="width:auto;">📌 このメニューをテンプレ保存</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-title"><span class="deco">開</span>受付を開く</div>
+          <div class="field"><div class="field-label">お弁当屋 <span class="req">必須</span></div>
+            <input type="text" id="org-shop" placeholder="例：〇〇弁当店" maxlength="30"></div>
+          <div class="field"><div class="field-label">締切時刻</div>
+            <input type="datetime-local" id="org-deadline"></div>
+          <button class="btn btn-primary" id="btn-org-open">受付を開く ‧ URLを発行</button>
+
+          <div id="org-share" style="display:none;">
+            <div class="share-box" id="org-share-url"></div>
+            <div class="btn-row three">
+              <button class="btn btn-ghost btn-small" id="btn-copy-url">📋 コピー</button>
+              <button class="btn btn-ghost btn-small" id="btn-share-url">📤 共有</button>
+              <button class="btn btn-ghost btn-small" id="btn-toggle-qr">🔳 QR</button>
+            </div>
+            <div id="qr-area" style="display:none;">
+              <div class="qr-wrap"><canvas id="qr-canvas"></canvas></div>
+              <div class="qr-caption">QRコードを各自に読み取ってもらえます</div>
+            </div>
+            <div class="banner" style="margin-top:10px;">
+              <span class="ic">💬</span>
+              <span>このURLを職場のチャットに貼ってください。各自スマホで開いて注文します。</span>
+            </div>
+            <div style="margin-top:8px;">
+              <button class="btn btn-ghost btn-tiny" id="btn-end-session" style="width:auto;color:var(--aka);border-color:var(--aka);">この受付を締め切る</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">
+            <span class="deco">承</span>みんなの注文
+            <span class="status open" id="org-session-status" style="display:none;margin-left:8px;">受付中</span>
+            <span class="countdown" id="org-countdown" style="margin-left:8px;display:none;"></span>
+            <button class="icon-btn right" id="btn-refresh-orders" title="更新" aria-label="更新">⟳</button>
+          </div>
+          <div class="switch" style="margin:0 0 8px;padding:0;">
+            <div class="switch-label">自動更新（30秒ごと）<small>注文が入ると自動で反映</small></div>
+            <div class="switch-toggle" id="sw-autorefresh"></div>
+          </div>
+          <div id="org-orders"></div>
+        </div>
+
+        <div class="card" id="org-summary-card">
+          <div class="section-title">
+            <span class="deco">控</span>発注内訳（合計）
+            <button class="icon-btn right" id="btn-print-summary" title="印刷" aria-label="印刷">🖨</button>
+          </div>
+          <div class="receipt" id="org-summary"></div>
+          <div class="btn-row" style="margin-top:12px;">
+            <button class="btn btn-ghost btn-small" id="btn-export-orders">📊 CSV</button>
+            <button class="btn btn-ghost btn-small" id="btn-copy-summary">📋 集計をコピー</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-title"><span class="deco">蔵</span>過去の受付</div>
+          <div id="org-session-history"></div>
+        </div>
+
+      </div>
+
+      <!-- 注文する人 -->
+      <div id="member-view" style="display:none;">
+        <div class="card">
+          <div class="section-title">
+            <span class="deco">注</span>
+            <span id="member-title">今日のお弁当</span>
+          </div>
+          <div id="member-status" style="margin-bottom:14px;"></div>
+          <div class="field">
+            <div class="field-label">お名前 <span class="req">必須</span></div>
+            <input type="text" id="member-name" placeholder="例：山田" maxlength="20">
+          </div>
+          <div class="field-label" style="margin-bottom:6px;">お弁当を選ぶ <span class="req">必須</span></div>
+          <ul class="menu-list" id="member-menu-list"></ul>
+          <div class="field" style="margin-top:14px;">
+            <div class="field-label">メモ <span class="opt">任意</span></div>
+            <input type="text" id="member-note" placeholder="例：ご飯少なめ／ネギ抜き／大盛りで" maxlength="60">
+          </div>
+          <button class="btn btn-primary" id="btn-member-submit" disabled style="margin-top:6px;">注文する</button>
+        </div>
+      </div>
+
+    </div>
+
+  </section>
+
+  <!-- ============================================================
+       設定
+       ============================================================ -->
+  <section class="view" id="view-settings">
+
+    <div class="card">
+      <div class="section-title"><span class="deco">繋</span>サーバー接続</div>
+      <div class="field">
+        <div class="field-label">Google Apps Script のURL</div>
+        <input type="url" id="cfg-gas-url" placeholder="https://script.google.com/macros/s/.../exec">
+      </div>
+      <button class="btn btn-primary" id="btn-save-cfg">保存する</button>
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="btn btn-ghost btn-small" id="btn-test-conn">🔍 接続テスト</button>
+        <button class="btn btn-ghost btn-small" id="btn-show-help">📖 設定の作り方</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title"><span class="deco">写</span>写真からメニュー読み取り</div>
+      <div class="field">
+        <div class="field-label">Gemini API キー <span class="opt">任意</span></div>
+        <input type="password" id="cfg-gemini-key" placeholder="AIza...">
+      </div>
+      <button class="btn btn-primary" id="btn-save-gemini">保存する</button>
+      <button class="btn btn-ghost btn-small" id="btn-show-gemini-help" style="margin-top:8px;">📖 APIキーの取得方法</button>
+      <div class="muted" style="margin-top:8px;font-size:12px;">無料枠あり（1日1500リクエスト）。キーはこの端末にのみ保存。</div>
+    </div>
+
+    <div class="card">
+      <div class="section-title"><span class="deco">外</span>表示</div>
+      <div class="switch">
+        <div class="switch-label">ダークモード<small>端末の設定に従う ／ 手動で切替</small></div>
+        <select id="cfg-theme" style="width:auto;flex-shrink:0;">
+          <option value="auto">自動</option>
+          <option value="light">ライト</option>
+          <option value="dark">ダーク</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title"><span class="deco">報</span>通知</div>
+      <div class="switch">
+        <div class="switch-label">締切前にリマインド<small>受付中の締切10分前に通知</small></div>
+        <div class="switch-toggle" id="sw-notify"></div>
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:6px;">通知を有効にするとブラウザの通知許可を求めます</div>
+    </div>
+
+    <div class="card">
+      <div class="section-title"><span class="deco">蔵</span>データ</div>
+      <div class="btn-row">
+        <button class="btn btn-ghost btn-small" id="btn-export">エクスポート</button>
+        <button class="btn btn-ghost btn-small" id="btn-import">インポート</button>
+      </div>
+      <div style="margin-top:10px;">
+        <button class="btn btn-danger btn-small" id="btn-clear">全データ削除</button>
+      </div>
+      <div class="muted" style="margin-top:10px;font-size:12px;">
+        データはこの端末に保存されます。<br>「みんなで」モードのみ Googleスプレッドシートに送信されます。
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title"><span class="deco">他</span>その他</div>
+      <button class="btn btn-ghost btn-small" id="btn-show-onboarding">使い方ガイドを再表示</button>
+      <div class="muted" style="margin-top:10px;font-size:11px;text-align:center;">v2.2 ‧ Made for うらやす市役所</div>
+    </div>
+
+  </section>
+
+</main>
+
+<!-- ===== モーダル類 ===== -->
+
+<!-- オンボーディング -->
+<div class="modal-bg" id="modal-onboarding">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <h2><span class="deco">迎</span>ようこそ</h2>
+      <button class="modal-close" data-close="modal-onboarding">✕</button>
+    </div>
+    <div class="modal-body" id="ob-body"></div>
+    <div class="modal-footer">
+      <div class="ob-dots" id="ob-dots"></div>
+      <div class="btn-row" style="margin-top:12px;">
+        <button class="btn btn-ghost btn-small" id="ob-prev">戻る</button>
+        <button class="btn btn-primary btn-small" id="ob-next">次へ</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ヘルプ -->
+<div class="modal-bg" id="modal-help">
+  <div class="modal">
+    <div class="modal-header">
+      <h2><span class="deco">問</span>使い方</h2>
+      <button class="modal-close" data-close="modal-help">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="help-block">
+        <h4>自分用モード</h4>
+        <p>お気に入りのメニューを登録しておけば、ボタン1つで今日のお昼を決めます。ルーレット・前回と違うのに切替も可能。</p>
+      </div>
+      <div class="help-block">
+        <h4>みんなでモード（注文係）</h4>
+        <p>今日のお弁当メニューを登録 → 受付を開く → 発行されたURLをチャットに貼る → みんなが選択 → 自動集計。発注書として印刷もできます。</p>
+      </div>
+      <div class="help-block">
+        <h4>みんなでモード（注文する人）</h4>
+        <p>共有されたURLを開いて、名前を入れてお弁当を選ぶだけ。完了です。</p>
+      </div>
+      <div class="help-block">
+        <h4>テンプレート</h4>
+        <p>よく使う弁当屋のメニューをテンプレ保存しておけば、毎回入力不要。注文係画面の📂ボタンから管理できます。</p>
+      </div>
+      <div class="help-block">
+        <h4>サーバー接続（初回のみ）</h4>
+        <p>「みんなで」モードを使うには、Google Apps Scriptを1回だけ設定する必要があります。設定タブの「設定の作り方」を参照。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 設定の作り方 -->
+<div class="modal-bg" id="modal-setup">
+  <div class="modal">
+    <div class="modal-header">
+      <h2><span class="deco">設</span>サーバーの作り方</h2>
+      <button class="modal-close" data-close="modal-setup">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin:0 0 12px;font-size:13px;line-height:1.7;">「みんなで」モードを使うには、Google Apps Script（GAS）を1度だけセットアップします。所要約5分。料金はかかりません。</p>
+      <div class="help">
+        <ol>
+          <li>Googleドライブで「新規」→「Googleスプレッドシート」を作成</li>
+          <li>メニュー「拡張機能」→「Apps Script」を開く</li>
+          <li>同じフォルダの <code>gas-backend.gs</code> の中身を全部コピー＆ペースト</li>
+          <li>右上「デプロイ」→「新しいデプロイ」→「ウェブアプリ」</li>
+          <li>「アクセスできるユーザー」を <b>全員</b> に設定</li>
+          <li>表示されたURLをコピー → 設定タブに貼って保存</li>
+        </ol>
+      </div>
+      <div class="banner warn" style="margin-top:14px;">
+        <span class="ic">⚠️</span>
+        <span>「全員」を選ばないとメンバーが注文できません。重要！</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- テンプレート管理 -->
+<div class="modal-bg" id="modal-templates">
+  <div class="modal">
+    <div class="modal-header">
+      <h2><span class="deco">蔵</span>テンプレート</h2>
+      <button class="modal-close" data-close="modal-templates">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="muted" style="margin:0 0 12px;font-size:13px;">よく使う弁当屋とメニューを保存しておけます。</p>
+      <div id="template-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 写真からメニュー読み取り -->
+<div class="modal-bg" id="modal-photo-menu">
+  <div class="modal">
+    <div class="modal-header">
+      <h2><span class="deco">写</span>写真からメニュー</h2>
+      <button class="modal-close" data-close="modal-photo-menu">✕</button>
+    </div>
+    <div class="modal-body" id="photo-menu-body">
+      <div class="empty">
+        <div class="empty-art">📷</div>
+        <div class="empty-msg">読み取り中…</div>
+      </div>
+    </div>
+    <div class="modal-footer" id="photo-menu-footer" style="display:none;">
+      <div class="muted" style="font-size:12px;margin-bottom:8px;text-align:center;">
+        <span id="photo-menu-count">0</span> 件選択中
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-ghost btn-small" data-close="modal-photo-menu">キャンセル</button>
+        <button class="btn btn-primary btn-small" id="btn-photo-menu-add">選択して追加</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Gemini APIキー 取得方法 -->
+<div class="modal-bg" id="modal-gemini-help">
+  <div class="modal">
+    <div class="modal-header">
+      <h2><span class="deco">鍵</span>Gemini API キーの取り方</h2>
+      <button class="modal-close" data-close="modal-gemini-help">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin:0 0 12px;font-size:13px;line-height:1.7;">
+        Google の Gemini API は<b>個人利用なら無料枠</b>で十分使えます（1日1500リクエスト）。
+        所要 約2分。クレジットカード登録は不要です。
+      </p>
+      <div class="help">
+        <ol>
+          <li><a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">aistudio.google.com/app/apikey</a> を開く</li>
+          <li>Googleアカウントでログイン</li>
+          <li>「API キーを作成」ボタンを押す</li>
+          <li>新しいプロジェクトを選んで「API キーを Google Cloud プロジェクトで作成」</li>
+          <li>表示されたキー（<code>AIza...</code>）をコピー</li>
+          <li>このアプリの設定タブに貼って「保存する」</li>
+        </ol>
+      </div>
+      <div class="banner warn" style="margin-top:14px;">
+        <span class="ic">⚠️</span>
+        <span>キーは他人に見せないでください。このアプリでは端末内にのみ保存されます。</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- メニュー編集 -->
+<div class="modal-bg" id="modal-edit-menu">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <h2><span class="deco">編</span>メニューを編集</h2>
+      <button class="modal-close" data-close="modal-edit-menu">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field"><div class="field-label">お弁当名 <span class="req">必須</span></div>
+        <input type="text" id="edit-menu-name" maxlength="40"></div>
+      <div class="row2">
+        <div class="field"><div class="field-label">価格（円） <span class="opt">任意</span></div>
+          <input type="number" id="edit-menu-price" inputmode="numeric" min="0" max="99999"></div>
+        <div class="field"><div class="field-label">数量制限 <span class="opt">任意</span></div>
+          <input type="number" id="edit-menu-limit" inputmode="numeric" min="1" max="999"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <div class="btn-row">
+        <button class="btn btn-ghost btn-small" data-close="modal-edit-menu">キャンセル</button>
+        <button class="btn btn-primary btn-small" id="btn-edit-menu-save">保存する</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- セッション詳細 -->
+<div class="modal-bg" id="modal-session">
+  <div class="modal">
+    <div class="modal-header">
+      <h2><span class="deco">蔵</span>過去の受付</h2>
+      <button class="modal-close" data-close="modal-session">✕</button>
+    </div>
+    <div class="modal-body" id="session-detail"></div>
+  </div>
+</div>
+
+<!-- 共通 -->
+<div class="toast" id="toast"></div>
+<div class="success-flash" id="success-flash"><div class="stamp">受</div></div>
+<div class="confetti" id="confetti"></div>
+
+<script>
+//=============================================================
+// データ管理
+//=============================================================
+const STORAGE_KEY = 'lunch-order-v1';
+const STATE_VERSION = 2;
+
+function defaultData() {
+  return {
+    version: STATE_VERSION,
+    soloMenu: [],
+    soloHistory: [],
+    config: {
+      gasUrl: '',
+      geminiKey: '',
+      theme: 'auto',
+      autoRefresh: true,
+      notifyDeadline: false,
+      onboardingDone: false
+    },
+    organizer: {
+      menu: [],
+      shop: '',
+      sessionId: null,
+      templates: [],
+      sessionHistory: []
+    },
+    member: { lastName: '' }
+  };
+}
+function migrate(s) {
+  // v1 → v2: 不足フィールド補完
+  if (!s.config) s.config = {};
+  if (s.config.geminiKey === undefined) s.config.geminiKey = '';
+  if (!s.config.theme) s.config.theme = 'auto';
+  if (s.config.autoRefresh === undefined) s.config.autoRefresh = true;
+  if (s.config.notifyDeadline === undefined) s.config.notifyDeadline = false;
+  if (s.config.onboardingDone === undefined) s.config.onboardingDone = false;
+  if (!s.organizer) s.organizer = { menu: [], shop: '', sessionId: null };
+  if (!s.organizer.templates) s.organizer.templates = [];
+  if (!s.organizer.sessionHistory) s.organizer.sessionHistory = [];
+  if (!s.member) s.member = { lastName: '' };
+  s.version = STATE_VERSION;
+  return s;
+}
+function loadData() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    return raw ? migrate(raw) : defaultData();
+  } catch (e) { return defaultData(); }
+}
+function saveData() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    toast('保存エラー：容量制限の可能性', true);
+  }
+}
+let state = loadData();
+
+//=============================================================
+// ユーティリティ
+//=============================================================
+function $(id) { return document.getElementById(id); }
+function $$(sel) { return document.querySelectorAll(sel); }
+function toast(msg, isError) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.toggle('error', !!isError);
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function fmtDate(d) {
+  const x = new Date(d);
+  return `${x.getMonth()+1}/${x.getDate()} ${String(x.getHours()).padStart(2,'0')}:${String(x.getMinutes()).padStart(2,'0')}`;
+}
+function fmtDateOnly(d) {
+  const x = new Date(d);
+  return `${x.getFullYear()}/${String(x.getMonth()+1).padStart(2,'0')}/${String(x.getDate()).padStart(2,'0')}`;
+}
+function fmtPrice(p) { return p ? Number(p).toLocaleString() : ''; }
+function escapeHtml(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function csvEscape(s) { return '"' + String(s||'').replace(/"/g, '""') + '"'; }
+function downloadFile(name, content, mime) {
+  const blob = new Blob([content], { type: mime || 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+(function setDate() {
+  const d = new Date();
+  const wd = ['日','月','火','水','木','金','土'][d.getDay()];
+  $('today-date').innerHTML = `${d.getMonth()+1}/${d.getDate()}<br>(${wd})`;
+})();
+
+//=============================================================
+// テーマ
+//=============================================================
+function applyTheme() {
+  document.documentElement.setAttribute('data-theme', state.config.theme || 'auto');
+}
+applyTheme();
+$('cfg-theme').value = state.config.theme || 'auto';
+$('cfg-theme').addEventListener('change', e => {
+  state.config.theme = e.target.value;
+  saveData(); applyTheme();
+  toast('表示を切り替えました');
+});
+
+//=============================================================
+// オンライン状態
+//=============================================================
+function updateOnlineStatus() {
+  const dot = $('online-dot');
+  if (navigator.onLine) {
+    dot.classList.remove('offline');
+    dot.title = 'オンライン';
+  } else {
+    dot.classList.add('offline');
+    dot.title = 'オフライン';
+  }
+}
+window.addEventListener('online', () => { updateOnlineStatus(); toast('オンラインに復帰しました'); });
+window.addEventListener('offline', () => { updateOnlineStatus(); toast('オフラインです', true); });
+updateOnlineStatus();
+
+//=============================================================
+// モード切替
+//=============================================================
+function switchMode(mode) {
+  $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+  $$('.view').forEach(v => v.classList.toggle('active', v.id === `view-${mode}`));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (mode === 'group') renderGroup();
+  if (mode === 'solo') renderSolo();
+}
+$$('.tab').forEach(t => t.addEventListener('click', () => switchMode(t.dataset.mode)));
+
+// セッション中ならバッジ
+function updateGroupBadge() {
+  const badge = $('group-badge');
+  if (state.organizer.sessionId) badge.classList.add('show'); else badge.classList.remove('show');
+}
+
+//=============================================================
+// 自分用
+//=============================================================
+function renderSolo() {
+  const list = $('solo-menu-list');
+  $('solo-count').textContent = state.soloMenu.length;
+  if (state.soloMenu.length === 0) {
+    list.innerHTML = `
+      <li class="empty">
+        <div class="empty-art">空</div>
+        <div class="empty-msg">「メニューを追加する」を開いて<br>お気に入りのお弁当を登録してください</div>
+      </li>`;
+  } else {
+    list.innerHTML = state.soloMenu.map((m) => `
+      <li class="menu-item">
+        <div class="body">
+          <div class="name">
+            <span class="text">${escapeHtml(m.name)}</span>
+            ${m.price ? `<span class="price">${fmtPrice(m.price)}</span>` : ''}
+          </div>
+          ${m.shop ? `<div class="shop">${escapeHtml(m.shop)}</div>` : ''}
+        </div>
+        <button class="del" data-del="${m.id}" aria-label="削除">🗑</button>
+      </li>`).join('');
+    list.querySelectorAll('[data-del]').forEach(b => {
+      b.addEventListener('click', e => {
+        e.stopPropagation();
+        if (confirm('このメニューを削除しますか？')) {
+          state.soloMenu = state.soloMenu.filter(m => m.id !== b.dataset.del);
+          saveData(); renderSolo();
+        }
+      });
+    });
+  }
+  // 履歴
+  const hist = $('solo-history');
+  if (state.soloHistory.length === 0) {
+    hist.innerHTML = `<li class="empty"><div class="empty-msg">まだ履歴はありません</div></li>`;
+  } else {
+    hist.innerHTML = state.soloHistory.slice(0, 15).map((h, i) => `
+      <li class="history-item">
+        ${i===0 ? '<span class="badge">最新</span>' : ''}
+        <span class="name">${escapeHtml(h.name)}</span>
+        <span class="date">${fmtDate(h.date)}</span>
+      </li>`).join('');
+  }
+  $('btn-pick').disabled = state.soloMenu.length === 0;
+  $('btn-roulette').disabled = state.soloMenu.length === 0;
+  $('btn-different').disabled = state.soloMenu.length < 2;
+
+  // 統計
+  renderSoloStats();
+}
+
+function renderSoloStats() {
+  const card = $('solo-stats-card');
+  if (state.soloHistory.length < 3) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  const now = Date.now();
+  const recent = state.soloHistory.filter(h => now - h.date < 30 * 86400000);
+  const tally = {};
+  recent.forEach(h => { tally[h.name] = (tally[h.name] || 0) + 1; });
+  const ranked = Object.entries(tally).sort((a,b) => b[1] - a[1]).slice(0, 5);
+  const max = ranked[0]?.[1] || 1;
+
+  $('solo-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-num">${recent.length}</div><div class="stat-label">回数</div></div>
+    <div class="stat-card"><div class="stat-num">${Object.keys(tally).length}</div><div class="stat-label">種類</div></div>
+    <div class="stat-card"><div class="stat-num">${state.soloMenu.length}</div><div class="stat-label">登録数</div></div>
+  `;
+  $('solo-ranking').innerHTML = ranked.map(([name, cnt], i) => `
+    <li class="ranking-item">
+      <div class="rank">${i+1}</div>
+      <div class="name">${escapeHtml(name)}</div>
+      <div class="bar" style="width:${Math.round(cnt/max*60)}px;"></div>
+      <div class="cnt">${cnt}回</div>
+    </li>`).join('');
+}
+
+function recordSolo(item) {
+  state.soloHistory.unshift({ id: uid(), name: item.name, shop: item.shop, date: Date.now() });
+  state.soloHistory = state.soloHistory.slice(0, 200);
+  saveData();
+  showSoloPick(item);
+  renderSolo();
+}
+function showSoloPick(item) {
+  $('solo-pick-result').innerHTML = `
+    <div class="todays-pick">
+      <div class="hanko">本日</div>
+      <div class="label">今日のお昼</div>
+      <div class="name">${escapeHtml(item.name)}</div>
+      <div class="meta">
+        ${item.shop ? escapeHtml(item.shop) : ''}
+        ${item.price ? `<span class="price">¥${fmtPrice(item.price)}</span>` : ''}
+      </div>
+    </div>`;
+  $('solo-pick-result').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+$('btn-solo-add').addEventListener('click', () => {
+  const name = $('solo-add-name').value.trim();
+  const shop = $('solo-add-shop').value.trim();
+  const price = $('solo-add-price').value.trim();
+  if (!name) { toast('品名を入力してください', true); $('solo-add-name').focus(); return; }
+  state.soloMenu.push({ id: uid(), name, shop, price });
+  saveData();
+  $('solo-add-name').value = ''; $('solo-add-shop').value = ''; $('solo-add-price').value = '';
+  renderSolo();
+  toast('追加しました');
+});
+$('btn-pick').addEventListener('click', () => {
+  recordSolo(state.soloMenu[Math.floor(Math.random() * state.soloMenu.length)]);
+});
+$('btn-different').addEventListener('click', () => {
+  const last = state.soloHistory[0]?.name;
+  const candidates = state.soloMenu.filter(m => m.name !== last);
+  recordSolo(candidates[Math.floor(Math.random() * candidates.length)] || state.soloMenu[0]);
+});
+$('btn-roulette').addEventListener('click', () => {
+  const box = $('roulette-box');
+  const r = $('roulette');
+  box.classList.add('on');
+  r.classList.remove('done');
+  r.classList.add('spinning');
+  box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  let i = 0;
+  const timer = setInterval(() => {
+    r.textContent = state.soloMenu[i % state.soloMenu.length].name;
+    i++;
+  }, 70);
+  setTimeout(() => {
+    clearInterval(timer);
+    r.classList.remove('spinning'); r.classList.add('done');
+    const item = state.soloMenu[Math.floor(Math.random() * state.soloMenu.length)];
+    r.textContent = item.name;
+    setTimeout(() => recordSolo(item), 450);
+  }, 1500);
+});
+
+// 履歴CSV出力
+$('btn-export-solo-history').addEventListener('click', () => {
+  if (state.soloHistory.length === 0) { toast('履歴がありません'); return; }
+  const rows = [['日時','品名','お店']]
+    .concat(state.soloHistory.map(h => [fmtDate(h.date), h.name, h.shop || '']))
+    .map(r => r.map(csvEscape).join(',')).join('\r\n');
+  const bom = '﻿';
+  downloadFile(`lunch-history-${new Date().toISOString().slice(0,10)}.csv`, bom + rows, 'text/csv;charset=utf-8');
+  toast('履歴をCSV出力しました');
+});
+
+//=============================================================
+// みんなで
+//=============================================================
+function renderGroup() {
+  const configured = !!state.config.gasUrl;
+  $('group-not-configured').style.display = configured ? 'none' : 'block';
+  $('group-main').style.display = configured ? 'block' : 'none';
+  if (!configured) return;
+
+  const sessionId = new URLSearchParams(location.search).get('s');
+  if (sessionId) showMemberView(sessionId);
+  else renderOrganizer();
+  renderTemplateChips();
+}
+
+$$('[data-role]').forEach(b => {
+  b.addEventListener('click', () => {
+    $$('[data-role]').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    const role = b.dataset.role;
+    $('organizer-view').style.display = role === 'organizer' ? 'block' : 'none';
+    $('member-view').style.display = role === 'member' ? 'block' : 'none';
+    if (role === 'organizer') renderOrganizer();
+  });
+});
+
+function renderOrganizer() {
+  $('organizer-view').style.display = 'block';
+  $('member-view').style.display = 'none';
+  const list = $('org-menu-list');
+  if (state.organizer.menu.length === 0) {
+    list.innerHTML = `<li class="empty"><div class="empty-msg">今日のお弁当を追加してください</div></li>`;
+  } else {
+    list.innerHTML = state.organizer.menu.map((m) => `
+      <li class="menu-item" data-edit-org="${m.id}">
+        <div class="body">
+          <div class="name">
+            <span class="text">${escapeHtml(m.name)}</span>
+            ${m.price ? `<span class="price">${fmtPrice(m.price)}</span>` : ''}
+            ${m.limit ? `<span class="badge gray" style="font-size:10px;background:var(--karashi-soft);color:var(--karashi);padding:1px 6px;border-radius:8px;font-weight:700;">上限${m.limit}</span>` : ''}
+          </div>
+          <div class="shop" style="font-size:11px;color:var(--sumi-faded);margin-top:2px;">タップで編集</div>
+        </div>
+        <button class="del" data-del-org="${m.id}" aria-label="削除">🗑</button>
+      </li>`).join('');
+    list.querySelectorAll('[data-edit-org]').forEach(li => {
+      li.addEventListener('click', e => {
+        if (e.target.closest('[data-del-org]')) return;
+        openEditMenuModal(li.dataset.editOrg);
+      });
+    });
+    list.querySelectorAll('[data-del-org]').forEach(b => {
+      b.addEventListener('click', e => {
+        e.stopPropagation();
+        if (!confirm('このお弁当を削除しますか？')) return;
+        state.organizer.menu = state.organizer.menu.filter(m => m.id !== b.dataset.delOrg);
+        saveData(); renderOrganizer();
+      });
+    });
+  }
+  $('org-shop').value = state.organizer.shop || '';
+  if (state.organizer.sessionId) {
+    $('org-share').style.display = 'block';
+    const url = buildShareUrl(state.organizer.sessionId);
+    $('org-share-url').textContent = url;
+    fetchOrders();
+    startAutoRefresh();
+  }
+  renderSessionHistory();
+  updateGroupBadge();
+}
+
+function renderTemplateChips() {
+  const wrap = $('template-chips');
+  if (!state.organizer.templates.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = state.organizer.templates.map(t => `
+    <span class="chip" data-tpl="${t.id}">📌 ${escapeHtml(t.name)}</span>
+  `).join('');
+  wrap.querySelectorAll('[data-tpl]').forEach(c => {
+    c.addEventListener('click', () => {
+      const t = state.organizer.templates.find(x => x.id === c.dataset.tpl);
+      if (!t) return;
+      if (state.organizer.menu.length && !confirm('現在のメニューを置き換えますか？')) return;
+      state.organizer.menu = t.menu.map(m => ({ ...m, id: uid() }));
+      state.organizer.shop = t.shop || state.organizer.shop;
+      saveData();
+      renderOrganizer();
+      toast(`「${t.name}」を読み込みました`);
+    });
+  });
+}
+
+$('btn-org-add').addEventListener('click', () => {
+  const name = $('org-add-name').value.trim();
+  const price = $('org-add-price').value.trim();
+  const limit = $('org-add-limit').value.trim();
+  if (!name) { toast('お弁当名を入力してください', true); return; }
+  const item = { id: uid(), name, price };
+  if (limit) item.limit = Number(limit);
+  state.organizer.menu.push(item);
+  saveData();
+  $('org-add-name').value = ''; $('org-add-price').value = ''; $('org-add-limit').value = '';
+  renderOrganizer();
+});
+// メニュー編集
+let editingMenuId = null;
+function openEditMenuModal(id) {
+  const m = state.organizer.menu.find(x => x.id === id);
+  if (!m) return;
+  editingMenuId = id;
+  $('edit-menu-name').value = m.name || '';
+  $('edit-menu-price').value = m.price || '';
+  $('edit-menu-limit').value = m.limit || '';
+  openModal('modal-edit-menu');
+}
+$('btn-edit-menu-save').addEventListener('click', () => {
+  const m = state.organizer.menu.find(x => x.id === editingMenuId);
+  if (!m) return;
+  const name = $('edit-menu-name').value.trim();
+  if (!name) { toast('お弁当名を入力してください', true); return; }
+  m.name = name;
+  m.price = $('edit-menu-price').value.trim();
+  const limit = $('edit-menu-limit').value.trim();
+  if (limit) m.limit = Number(limit); else delete m.limit;
+  saveData();
+  closeModal('modal-edit-menu');
+  renderOrganizer();
+  toast('メニューを更新しました');
+});
+
+$('btn-save-template').addEventListener('click', () => {
+  if (!state.organizer.menu.length) { toast('メニューが空です', true); return; }
+  const shop = $('org-shop').value.trim() || state.organizer.shop;
+  const name = prompt('テンプレ名（例：〇〇弁当店）', shop || '');
+  if (!name) return;
+  state.organizer.templates.push({
+    id: uid(), name, shop,
+    menu: state.organizer.menu.map(m => ({ name: m.name, price: m.price }))
+  });
+  saveData(); renderTemplateChips();
+  toast(`「${name}」を保存しました`);
+});
+
+$('btn-templates').addEventListener('click', () => {
+  const tlist = $('template-list');
+  if (!state.organizer.templates.length) {
+    tlist.innerHTML = `<div class="empty"><div class="empty-msg">テンプレートはまだありません<br><small>注文係画面で「📌 テンプレ保存」</small></div></div>`;
+  } else {
+    tlist.innerHTML = state.organizer.templates.map(t => `
+      <div class="session-card">
+        <div class="sc-top">
+          <div class="sc-shop">${escapeHtml(t.name)}</div>
+          <button class="btn-tiny" data-del-tpl="${t.id}" style="background:transparent;border:1px solid var(--aka);color:var(--aka);">削除</button>
+        </div>
+        <div class="sc-meta">${escapeHtml(t.shop || '')} ‧ ${t.menu.length}品</div>
+        <div class="sc-meta" style="margin-top:6px;">${t.menu.map(m => escapeHtml(m.name)).slice(0,3).join('、')}${t.menu.length>3?'...':''}</div>
+      </div>`).join('');
+    tlist.querySelectorAll('[data-del-tpl]').forEach(b => {
+      b.addEventListener('click', () => {
+        if (!confirm('このテンプレを削除しますか？')) return;
+        state.organizer.templates = state.organizer.templates.filter(t => t.id !== b.dataset.delTpl);
+        saveData();
+        renderTemplateChips();
+        $('btn-templates').click();
+      });
+    });
+  }
+  openModal('modal-templates');
+});
+
+$('btn-org-open').addEventListener('click', async () => {
+  const shop = $('org-shop').value.trim();
+  const deadline = $('org-deadline').value;
+  if (state.organizer.menu.length === 0) { toast('まずお弁当を追加してください', true); return; }
+  if (!shop) { toast('お弁当屋を入力してください', true); return; }
+  state.organizer.shop = shop;
+  saveData();
+  const btn = $('btn-org-open');
+  btn.disabled = true; btn.textContent = '受付を開いています…';
+  try {
+    const res = await gasCall('createSession', { shop, deadline, menu: state.organizer.menu });
+    state.organizer.sessionId = res.sessionId;
+    state.organizer.currentDeadline = deadline;
+    saveData();
+    $('org-share').style.display = 'block';
+    $('org-share-url').textContent = buildShareUrl(res.sessionId);
+    fetchOrders();
+    startAutoRefresh();
+    scheduleDeadlineNotification();
+    toast('受付を開きました！URLを共有してください');
+    updateGroupBadge();
+  } catch (e) {
+    toast('エラー: ' + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = '受付を開く ‧ URLを発行';
+  }
+});
+
+function buildShareUrl(sessionId) {
+  return `${location.origin}${location.pathname}?s=${sessionId}`;
+}
+$('btn-copy-url').addEventListener('click', () => {
+  navigator.clipboard.writeText($('org-share-url').textContent).then(() => toast('コピーしました'));
+});
+$('btn-share-url').addEventListener('click', async () => {
+  const url = $('org-share-url').textContent;
+  if (navigator.share) {
+    try { await navigator.share({ title: 'お昼の注文', text: '今日のお弁当を選んでください：', url }); } catch (e) {}
+  } else {
+    navigator.clipboard.writeText(url).then(() => toast('URLをコピーしました'));
+  }
+});
+$('btn-toggle-qr').addEventListener('click', () => {
+  const area = $('qr-area');
+  if (area.style.display === 'none') {
+    area.style.display = 'block';
+    if (typeof QRious !== 'undefined') {
+      new QRious({ element: $('qr-canvas'), value: $('org-share-url').textContent, size: 200, level: 'M' });
+    }
+  } else {
+    area.style.display = 'none';
+  }
+});
+$('btn-end-session').addEventListener('click', () => {
+  if (!confirm('この受付を締め切りますか？')) return;
+  archiveCurrentSession(true);
+});
+
+$('btn-refresh-orders').addEventListener('click', fetchOrders);
+
+let autoRefreshTimer = null;
+$('sw-autorefresh').addEventListener('click', () => {
+  state.config.autoRefresh = !state.config.autoRefresh;
+  saveData(); updateAutoRefreshSwitch();
+  if (state.config.autoRefresh) startAutoRefresh(); else stopAutoRefresh();
+});
+function updateAutoRefreshSwitch() {
+  $('sw-autorefresh').classList.toggle('on', state.config.autoRefresh);
+}
+function startAutoRefresh() {
+  stopAutoRefresh();
+  if (!state.config.autoRefresh) return;
+  if (!state.organizer.sessionId) return;
+  autoRefreshTimer = setInterval(fetchOrders, 30000);
+}
+function stopAutoRefresh() {
+  if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+}
+
+async function fetchOrders() {
+  if (!state.organizer.sessionId) return;
+  if (!navigator.onLine) {
+    $('org-orders').innerHTML = `<div class="banner error"><span class="ic">📡</span><span>オフラインです</span></div>`;
+    return;
+  }
+  if ($('org-orders').innerHTML === '') {
+    $('org-orders').innerHTML = `<div><div class="skeleton" style="width:60%;"></div><div class="skeleton" style="width:80%;"></div><div class="skeleton" style="width:50%;"></div></div>`;
+  }
+  try {
+    const res = await gasCall('getOrders', { sessionId: state.organizer.sessionId });
+    renderOrdersAndSummary(res);
+    updateCountdown();
+  } catch (e) {
+    $('org-orders').innerHTML = `<div class="banner error"><span class="ic">⚠️</span><span>取得エラー: ${escapeHtml(e.message)}</span></div>`;
+  }
+}
+
+let prevOrderCount = 0;
+function renderOrdersAndSummary(res) {
+  const orders = res.orders || [];
+  const ordersEl = $('org-orders');
+
+  // 新着通知
+  if (orders.length > prevOrderCount && prevOrderCount > 0) {
+    toast(`新しい注文 ${orders.length - prevOrderCount} 件`);
+  }
+  prevOrderCount = orders.length;
+
+  if (orders.length === 0) {
+    ordersEl.innerHTML = `<div class="empty"><div class="empty-msg">まだ注文はありません<br><span style="font-size:12px;">右上の ⟳ で更新できます</span></div></div>`;
+  } else {
+    ordersEl.innerHTML = `<ul class="history-list">` + orders.map((o, i) => `
+      <li class="history-item">
+        <span class="badge">${String(i+1).padStart(2,'0')}</span>
+        <span class="name"><b>${escapeHtml(o.name)}</b> さん → ${escapeHtml(o.item)}${o.note ? ` <span style="display:inline-block;background:var(--karashi-soft);color:var(--karashi);padding:1px 7px;border-radius:8px;font-size:11px;font-weight:700;margin-left:4px;">📝 ${escapeHtml(o.note)}</span>` : ''}</span>
+        <span class="date">${fmtDate(o.timestamp)}</span>
+      </li>`).join('') + `</ul>`;
+  }
+  // 集計
+  const summaryEl = $('org-summary');
+  const tally = {};
+  orders.forEach(o => { tally[o.item] = (tally[o.item] || 0) + 1; });
+  const items = Object.entries(tally);
+  if (items.length === 0) {
+    summaryEl.innerHTML = `<div class="muted" style="text-align:center;padding:14px;">注文が入ると集計されます</div>`;
+  } else {
+    let total = 0;
+    const lines = items.map(([name, count]) => {
+      const m = state.organizer.menu.find(x => x.name === name);
+      const price = m ? Number(m.price || 0) : 0;
+      const subtotal = price * count;
+      total += subtotal;
+      return `<div class="r-row"><span>${escapeHtml(name)} <span class="qty">× ${count}</span></span><span>¥${subtotal.toLocaleString()}</span></div>`;
+    }).join('');
+    summaryEl.innerHTML = lines + `
+      <div class="r-row total"><span>合計（${orders.length}人）</span><span>¥${total.toLocaleString()}</span></div>
+      <div class="muted print-only" style="margin-top:10px;font-size:11px;">${escapeHtml(state.organizer.shop)} ‧ ${fmtDate(Date.now())}</div>`;
+  }
+  // セッションステータス
+  $('org-session-status').style.display = 'inline-flex';
+  // 受付中保管
+  state.organizer.lastOrders = orders;
+  saveData();
+}
+
+// 締切カウントダウン
+let countdownTimer = null;
+function updateCountdown() {
+  const el = $('org-countdown');
+  const dl = state.organizer.currentDeadline;
+  if (!dl) { el.style.display = 'none'; return; }
+  const t = new Date(dl) - new Date();
+  if (t <= 0) {
+    el.textContent = '締切済';
+    el.classList.add('urgent');
+    el.style.display = 'inline';
+    return;
+  }
+  const m = Math.floor(t / 60000);
+  const s = Math.floor((t % 60000) / 1000);
+  el.style.display = 'inline';
+  el.textContent = m >= 60 ? `あと${Math.floor(m/60)}時間${m%60}分` : `あと${m}分${String(s).padStart(2,'0')}秒`;
+  el.classList.toggle('urgent', m < 10);
+}
+function startCountdown() {
+  if (countdownTimer) clearInterval(countdownTimer);
+  countdownTimer = setInterval(updateCountdown, 1000);
+}
+
+// 印刷
+$('btn-print-summary').addEventListener('click', () => {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('print-target'));
+  $('view-group').classList.add('print-target');
+  setTimeout(() => window.print(), 100);
+});
+
+// CSV出力（注文一覧）
+$('btn-export-orders').addEventListener('click', () => {
+  const orders = state.organizer.lastOrders || [];
+  if (!orders.length) { toast('データがありません', true); return; }
+  const rows = [['順','名前','お弁当','メモ','時刻']]
+    .concat(orders.map((o, i) => [i+1, o.name, o.item, o.note || '', fmtDate(o.timestamp)]))
+    .map(r => r.map(csvEscape).join(',')).join('\r\n');
+  const bom = '﻿';
+  downloadFile(`orders-${new Date().toISOString().slice(0,10)}.csv`, bom + rows, 'text/csv;charset=utf-8');
+  toast('注文をCSV出力しました');
+});
+
+// 集計をテキストでコピー
+$('btn-copy-summary').addEventListener('click', () => {
+  const orders = state.organizer.lastOrders || [];
+  if (!orders.length) { toast('データがありません', true); return; }
+  const tally = {};
+  orders.forEach(o => { tally[o.item] = (tally[o.item] || 0) + 1; });
+  let total = 0;
+  const lines = Object.entries(tally).map(([name, count]) => {
+    const m = state.organizer.menu.find(x => x.name === name);
+    const price = m ? Number(m.price || 0) : 0;
+    total += price * count;
+    return `${name} × ${count} = ¥${(price*count).toLocaleString()}`;
+  });
+  // メモ付きの個別注文も末尾に追加（メモがある人だけ）
+  const notesLines = orders.filter(o => o.note).map(o => `・${o.name}：${o.item}（${o.note}）`);
+  const notesBlock = notesLines.length ? `\n\n【特記事項】\n${notesLines.join('\n')}` : '';
+  const text = `【${state.organizer.shop || 'お弁当'}発注】\n${fmtDateOnly(Date.now())}\n\n` + lines.join('\n') + `\n\n合計（${orders.length}人）: ¥${total.toLocaleString()}` + notesBlock;
+  navigator.clipboard.writeText(text).then(() => toast('集計をコピーしました'));
+});
+
+// 過去セッション
+function archiveCurrentSession(closed) {
+  if (!state.organizer.sessionId) return;
+  state.organizer.sessionHistory.unshift({
+    id: uid(),
+    sessionId: state.organizer.sessionId,
+    shop: state.organizer.shop,
+    menu: state.organizer.menu.slice(),
+    orders: (state.organizer.lastOrders || []).slice(),
+    deadline: state.organizer.currentDeadline,
+    closedAt: Date.now()
+  });
+  state.organizer.sessionHistory = state.organizer.sessionHistory.slice(0, 50);
+  state.organizer.sessionId = null;
+  state.organizer.currentDeadline = null;
+  state.organizer.lastOrders = [];
+  prevOrderCount = 0;
+  saveData();
+  stopAutoRefresh();
+  $('org-share').style.display = 'none';
+  $('org-orders').innerHTML = '';
+  $('org-summary').innerHTML = '';
+  $('org-session-status').style.display = 'none';
+  $('org-countdown').style.display = 'none';
+  renderSessionHistory();
+  updateGroupBadge();
+  if (closed) toast('受付を締め切りました');
+}
+
+function renderSessionHistory() {
+  const wrap = $('org-session-history');
+  const hist = state.organizer.sessionHistory;
+  if (!hist.length) {
+    wrap.innerHTML = `<div class="empty" style="padding:14px;"><div class="empty-msg">過去の受付はまだありません</div></div>`;
+    return;
+  }
+  wrap.innerHTML = hist.slice(0, 10).map(s => {
+    const total = (s.orders || []).reduce((sum, o) => {
+      const m = (s.menu || []).find(x => x.name === o.item);
+      return sum + (m ? Number(m.price || 0) : 0);
+    }, 0);
+    return `
+      <div class="session-card" data-sid="${s.id}">
+        <div class="sc-top">
+          <div class="sc-shop">${escapeHtml(s.shop || '無題')}</div>
+          <div class="sc-date">${fmtDateOnly(s.closedAt)}</div>
+        </div>
+        <div class="sc-meta">${(s.orders || []).length}人 ‧ ¥${total.toLocaleString()}</div>
+      </div>`;
+  }).join('');
+  wrap.querySelectorAll('[data-sid]').forEach(c => {
+    c.addEventListener('click', () => showSessionDetail(c.dataset.sid));
+  });
+}
+function showSessionDetail(sid) {
+  const s = state.organizer.sessionHistory.find(x => x.id === sid);
+  if (!s) return;
+  const orders = s.orders || [];
+  const tally = {};
+  orders.forEach(o => { tally[o.item] = (tally[o.item] || 0) + 1; });
+  let total = 0;
+  const lines = Object.entries(tally).map(([name, count]) => {
+    const m = (s.menu || []).find(x => x.name === name);
+    const price = m ? Number(m.price || 0) : 0;
+    total += price * count;
+    return `<div class="r-row"><span>${escapeHtml(name)} <span class="qty">× ${count}</span></span><span>¥${(price*count).toLocaleString()}</span></div>`;
+  }).join('');
+  $('session-detail').innerHTML = `
+    <div class="muted" style="margin-bottom:10px;">${escapeHtml(s.shop || '')} ‧ ${fmtDateOnly(s.closedAt)}</div>
+    <div class="receipt">${lines}<div class="r-row total"><span>合計（${orders.length}人）</span><span>¥${total.toLocaleString()}</span></div></div>
+    <div style="margin-top:14px;">
+      <h4 style="font-size:13px;margin:0 0 6px;">注文内訳</h4>
+      <ul class="history-list">
+        ${orders.map(o => `<li class="history-item"><span class="name"><b>${escapeHtml(o.name)}</b> さん → ${escapeHtml(o.item)}${o.note ? ` <span style="background:var(--karashi-soft);color:var(--karashi);padding:1px 6px;border-radius:6px;font-size:11px;font-weight:700;">📝${escapeHtml(o.note)}</span>` : ''}</span><span class="date">${fmtDate(o.timestamp)}</span></li>`).join('')}
+      </ul>
+    </div>
+    <div style="margin-top:14px;">
+      <button class="btn btn-danger btn-small" id="btn-del-session">この履歴を削除</button>
+    </div>`;
+  $('btn-del-session').addEventListener('click', () => {
+    if (!confirm('この履歴を削除しますか？')) return;
+    state.organizer.sessionHistory = state.organizer.sessionHistory.filter(x => x.id !== sid);
+    saveData(); renderSessionHistory(); closeModal('modal-session');
+  });
+  openModal('modal-session');
+}
+
+//=============================================================
+// 注文する人
+//=============================================================
+async function showMemberView(sessionId) {
+  $('organizer-view').style.display = 'none';
+  $('member-view').style.display = 'block';
+  $$('[data-role]').forEach(b => b.style.display = 'none');
+  // 名前を復元
+  if (state.member.lastName) $('member-name').value = state.member.lastName;
+
+  const titleEl = $('member-title');
+  const statusEl = $('member-status');
+  const listEl = $('member-menu-list');
+  listEl.innerHTML = `<li><div class="skeleton" style="width:80%;"></div><div class="skeleton" style="width:60%;"></div><div class="skeleton" style="width:70%;"></div></li>`;
+  try {
+    const res = await gasCall('getSession', { sessionId });
+    titleEl.textContent = (res.shop || '本日') + ' のお弁当';
+    const closed = res.deadline && new Date(res.deadline) < new Date();
+    let statusHTML = res.deadline
+      ? `<span class="status ${closed?'closed':'open'}">${closed?'締切済':'受付中'}</span>
+         <span class="muted" style="margin-left:8px;font-size:12px;">締切 ${fmtDate(res.deadline)}</span>`
+      : '<span class="status open">受付中</span>';
+    statusEl.innerHTML = statusHTML;
+
+    if (closed) {
+      listEl.innerHTML = `<li class="empty"><div class="empty-art">締</div><div class="empty-msg">受付は締め切られました</div></li>`;
+      $('btn-member-submit').style.display = 'none';
+      return;
+    }
+    // 数量制限のための現在の注文集計を取得
+    let tally = {};
+    try {
+      const ord = await gasCall('getOrders', { sessionId });
+      (ord.orders || []).forEach(o => { tally[o.item] = (tally[o.item] || 0) + 1; });
+    } catch (e) { /* 取れなくても致命ではない */ }
+
+    let selected = null;
+    listEl.innerHTML = res.menu.map((m) => {
+      const taken = tally[m.name] || 0;
+      const limit = m.limit ? Number(m.limit) : null;
+      const remaining = limit !== null ? limit - taken : null;
+      const soldOut = remaining !== null && remaining <= 0;
+      return `
+      <li class="menu-item pickable ${soldOut?'':''}" data-pick="${escapeHtml(m.name)}" ${soldOut?'data-soldout="1" style="opacity:.4;pointer-events:none;"':''}>
+        <div class="body">
+          <div class="name">
+            <span class="text">${escapeHtml(m.name)}</span>
+            ${m.price ? `<span class="price">${fmtPrice(m.price)}</span>` : ''}
+            ${limit !== null ? `<span class="badge ${soldOut?'gray':'green'}" style="font-size:10px;padding:1px 6px;border-radius:8px;font-weight:700;">${soldOut?'売切':`残${remaining}`}</span>` : ''}
+          </div>
+        </div>
+      </li>`;
+    }).join('');
+    listEl.querySelectorAll('[data-pick]:not([data-soldout])').forEach(el => {
+      el.addEventListener('click', () => {
+        listEl.querySelectorAll('[data-pick]').forEach(x => x.classList.remove('selected'));
+        el.classList.add('selected');
+        selected = el.dataset.pick;
+        $('btn-member-submit').disabled = false;
+      });
+    });
+    $('btn-member-submit').onclick = async () => {
+      const name = $('member-name').value.trim();
+      const note = $('member-note').value.trim();
+      if (!name) { toast('お名前を入力してください', true); $('member-name').focus(); return; }
+      if (!selected) { toast('お弁当を選んでください', true); return; }
+      try {
+        $('btn-member-submit').disabled = true;
+        await gasCall('submitOrder', { sessionId, name, item: selected, note });
+        // 名前を保存
+        state.member.lastName = name; saveData();
+        // 演出
+        const flash = $('success-flash');
+        flash.classList.add('on');
+        confetti();
+        setTimeout(() => flash.classList.remove('on'), 1300);
+        listEl.innerHTML = `
+          <li class="empty">
+            <div class="empty-art" style="color:var(--shu);opacity:1;">✓</div>
+            <div class="empty-msg">
+              <b>${escapeHtml(name)}</b> さん<br>
+              「${escapeHtml(selected)}」で注文完了しました<br>
+              ${note ? `<span style="display:inline-block;margin-top:6px;padding:3px 10px;background:var(--karashi-soft);color:var(--karashi);border-radius:8px;font-size:12px;">📝 ${escapeHtml(note)}</span><br>` : ''}
+              <span style="color:var(--sumi-faded);font-size:12px;">ありがとうございました</span>
+            </div>
+          </li>`;
+        $('btn-member-submit').style.display = 'none';
+        statusEl.innerHTML += ' <span class="status sent">送信済</span>';
+      } catch (e) {
+        toast('送信エラー: ' + e.message, true);
+        $('btn-member-submit').disabled = false;
+      }
+    };
+  } catch (e) {
+    listEl.innerHTML = `<li class="banner error"><span class="ic">⚠️</span><span>注文票を取得できません<br>${escapeHtml(e.message)}</span></li>`;
+  }
+}
+
+//=============================================================
+// GAS 通信（リトライ付き）
+//=============================================================
+async function gasCall(action, payload, retries) {
+  if (retries === undefined) retries = 1;
+  if (!state.config.gasUrl) throw new Error('サーバー未設定');
+  if (!navigator.onLine) throw new Error('オフラインです');
+  try {
+    const res = await fetch(state.config.gasUrl, {
+      method: 'POST',
+      body: JSON.stringify({ action, ...payload }),
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return data;
+  } catch (e) {
+    if (retries > 0) {
+      await new Promise(r => setTimeout(r, 800));
+      return gasCall(action, payload, retries - 1);
+    }
+    throw e;
+  }
+}
+
+//=============================================================
+// 通知
+//=============================================================
+$('sw-notify').addEventListener('click', async () => {
+  if (!state.config.notifyDeadline) {
+    if (!('Notification' in window)) {
+      toast('この端末は通知に対応していません', true);
+      return;
+    }
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { toast('通知が許可されませんでした', true); return; }
+    state.config.notifyDeadline = true;
+  } else {
+    state.config.notifyDeadline = false;
+  }
+  saveData(); updateNotifySwitch();
+});
+function updateNotifySwitch() {
+  $('sw-notify').classList.toggle('on', state.config.notifyDeadline);
+}
+
+let deadlineNotifyTimer = null;
+function scheduleDeadlineNotification() {
+  if (deadlineNotifyTimer) clearTimeout(deadlineNotifyTimer);
+  if (!state.config.notifyDeadline) return;
+  if (!state.organizer.currentDeadline) return;
+  const t = new Date(state.organizer.currentDeadline) - new Date() - 10 * 60000;
+  if (t <= 0) return;
+  deadlineNotifyTimer = setTimeout(() => {
+    if (Notification.permission === 'granted') {
+      new Notification('まもなく締切', {
+        body: `${state.organizer.shop} の注文締切まで10分です`,
+        icon: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><circle cx=%2232%22 cy=%2232%22 r=%2228%22 fill=%22%23C53A28%22/><text x=%2232%22 y=%2244%22 font-size=%2232%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22serif%22>食</text></svg>'
+      });
+    }
+  }, t);
+}
+
+//=============================================================
+// 紙吹雪
+//=============================================================
+function confetti() {
+  const wrap = $('confetti');
+  wrap.innerHTML = '';
+  const colors = ['#c53a28','#d4a017','#5c8048','#2a4a5c','#7b5a82','#c4632e'];
+  for (let i = 0; i < 40; i++) {
+    const piece = document.createElement('i');
+    piece.style.left = (Math.random() * 100) + 'vw';
+    piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.animationDelay = (Math.random() * 0.4) + 's';
+    piece.style.animationDuration = (1.4 + Math.random() * 0.8) + 's';
+    piece.style.transform = `rotate(${Math.random()*360}deg)`;
+    wrap.appendChild(piece);
+  }
+  setTimeout(() => wrap.innerHTML = '', 2500);
+}
+
+//=============================================================
+// 設定
+//=============================================================
+$('cfg-gas-url').value = state.config.gasUrl || '';
+$('btn-save-cfg').addEventListener('click', () => {
+  state.config.gasUrl = $('cfg-gas-url').value.trim();
+  saveData(); toast('保存しました');
+});
+
+// Gemini API キー
+$('cfg-gemini-key').value = state.config.geminiKey || '';
+$('btn-save-gemini').addEventListener('click', () => {
+  state.config.geminiKey = $('cfg-gemini-key').value.trim();
+  saveData(); toast('保存しました');
+});
+$('btn-show-gemini-help').addEventListener('click', () => openModal('modal-gemini-help'));
+
+// =============================================================
+// 写真からメニュー読み取り（Gemini API）
+// =============================================================
+$('btn-photo-menu').addEventListener('click', () => {
+  if (!state.config.geminiKey) {
+    if (!confirm('「写真から読み取り」を使うにはGemini APIキーが必要です。設定タブを開きますか？')) return;
+    switchMode('settings');
+    setTimeout(() => $('cfg-gemini-key').focus(), 300);
+    return;
+  }
+  $('photo-menu-input').click();
+});
+
+$('photo-menu-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = ''; // 同じファイルを再選択できるようにリセット
+  if (!file) return;
+
+  // モーダルをローディング状態で開く
+  $('photo-menu-body').innerHTML = `
+    <div class="empty">
+      <div class="empty-art">📷</div>
+      <div class="empty-msg">画像を読み取り中…<br><span style="font-size:11px;color:var(--sumi-faded);">数秒お待ちください</span></div>
+    </div>`;
+  $('photo-menu-footer').style.display = 'none';
+  openModal('modal-photo-menu');
+
+  try {
+    // 画像をリサイズ＆Base64化
+    const base64 = await resizeImageToBase64(file, 1280, 0.85);
+    // Gemini API 呼び出し
+    const items = await geminiExtractMenu(base64);
+    if (!items.length) {
+      $('photo-menu-body').innerHTML = `
+        <div class="empty">
+          <div class="empty-art">？</div>
+          <div class="empty-msg">メニューが読み取れませんでした<br><span style="font-size:12px;">写りの良い別の写真でお試しください</span></div>
+        </div>`;
+      return;
+    }
+    renderPhotoMenuCandidates(items);
+  } catch (err) {
+    $('photo-menu-body').innerHTML = `
+      <div class="banner error" style="margin:0;">
+        <span class="ic">⚠️</span>
+        <span>読み取りエラー：${escapeHtml(err.message)}<br>
+        <span style="font-size:11px;">APIキーやネットワークをご確認ください</span></span>
+      </div>`;
+  }
+});
+
+// 画像を長辺 maxLen にリサイズして JPEG Base64 で返す
+function resizeImageToBase64(file, maxLen, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('画像を読み込めません'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('画像形式が不正です'));
+      img.onload = () => {
+        const long = Math.max(img.width, img.height);
+        const scale = long > maxLen ? maxLen / long : 1;
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataUrl.split(',')[1]); // base64 部分のみ
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// Gemini API でメニュー抽出
+async function geminiExtractMenu(base64) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(state.config.geminiKey)}`;
+  const body = {
+    contents: [{
+      parts: [
+        { inline_data: { mime_type: 'image/jpeg', data: base64 } },
+        { text: 'この画像は弁当屋・飲食店の紙メニューです。商品名と税込価格をJSON配列で返してください。価格が読めない・記載が無い場合は0。サイドメニュー・小鉢・飲み物も含めて構いません。重複や見出し（「お弁当」「定食」等のカテゴリ名）は除外してください。' }
+      ]
+    }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            price: { type: 'number' }
+          },
+          required: ['name', 'price']
+        }
+      },
+      temperature: 0.1
+    }
+  };
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    let msg = `HTTP ${res.status}`;
+    try { msg = JSON.parse(errText)?.error?.message || msg; } catch (e) {}
+    throw new Error(msg);
+  }
+  const data = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+  const items = JSON.parse(text);
+  return Array.isArray(items) ? items : [];
+}
+
+// 候補表示
+let photoMenuCandidates = [];
+function renderPhotoMenuCandidates(items) {
+  photoMenuCandidates = items.map((it, i) => ({
+    idx: i,
+    name: String(it.name || '').trim(),
+    price: Number(it.price) || 0,
+    selected: true
+  })).filter(it => it.name);
+
+  const html = `
+    <div class="muted" style="font-size:12px;margin-bottom:10px;">
+      ${photoMenuCandidates.length} 件読み取りました。追加するものにチェックを入れて、必要なら名前・価格を直してください。
+    </div>
+    <div class="btn-row" style="margin-bottom:10px;">
+      <button class="btn btn-ghost btn-tiny" id="pm-all">全選択</button>
+      <button class="btn btn-ghost btn-tiny" id="pm-none">全解除</button>
+    </div>
+    <ul class="menu-list" id="pm-list">
+      ${photoMenuCandidates.map(it => `
+        <li class="menu-item" style="cursor:default;align-items:flex-start;padding:10px 0;">
+          <label style="display:flex;align-items:center;flex-shrink:0;width:32px;cursor:pointer;">
+            <input type="checkbox" data-pm-chk="${it.idx}" ${it.selected?'checked':''} style="width:20px;height:20px;cursor:pointer;">
+          </label>
+          <div class="body" style="display:flex;gap:6px;align-items:center;">
+            <input type="text" data-pm-name="${it.idx}" value="${escapeHtml(it.name)}" maxlength="40" style="flex:1;min-width:0;padding:8px 10px;font-size:14px;">
+            <input type="number" data-pm-price="${it.idx}" value="${it.price || ''}" placeholder="円" inputmode="numeric" min="0" max="99999" style="width:80px;padding:8px 10px;font-size:14px;text-align:right;">
+          </div>
+        </li>`).join('')}
+    </ul>`;
+  $('photo-menu-body').innerHTML = html;
+  $('photo-menu-footer').style.display = 'block';
+  updatePhotoMenuCount();
+
+  // イベントバインド
+  $('pm-all').addEventListener('click', () => {
+    photoMenuCandidates.forEach(it => it.selected = true);
+    document.querySelectorAll('[data-pm-chk]').forEach(c => c.checked = true);
+    updatePhotoMenuCount();
+  });
+  $('pm-none').addEventListener('click', () => {
+    photoMenuCandidates.forEach(it => it.selected = false);
+    document.querySelectorAll('[data-pm-chk]').forEach(c => c.checked = false);
+    updatePhotoMenuCount();
+  });
+  document.querySelectorAll('[data-pm-chk]').forEach(c => {
+    c.addEventListener('change', () => {
+      const idx = Number(c.dataset.pmChk);
+      photoMenuCandidates[idx].selected = c.checked;
+      updatePhotoMenuCount();
+    });
+  });
+  document.querySelectorAll('[data-pm-name]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      photoMenuCandidates[Number(inp.dataset.pmName)].name = inp.value;
+    });
+  });
+  document.querySelectorAll('[data-pm-price]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      photoMenuCandidates[Number(inp.dataset.pmPrice)].price = Number(inp.value) || 0;
+    });
+  });
+}
+function updatePhotoMenuCount() {
+  $('photo-menu-count').textContent = photoMenuCandidates.filter(it => it.selected).length;
+}
+
+$('btn-photo-menu-add').addEventListener('click', () => {
+  const picked = photoMenuCandidates.filter(it => it.selected && it.name.trim());
+  if (!picked.length) { toast('1件以上を選んでください', true); return; }
+  picked.forEach(it => {
+    state.organizer.menu.push({
+      id: uid(),
+      name: it.name.trim(),
+      price: it.price ? String(it.price) : ''
+    });
+  });
+  saveData();
+  closeModal('modal-photo-menu');
+  renderOrganizer();
+  toast(`${picked.length} 件を追加しました`);
+});
+$('btn-test-conn').addEventListener('click', async () => {
+  const url = $('cfg-gas-url').value.trim();
+  if (!url) { toast('URLを入力してください', true); return; }
+  toast('接続テスト中…');
+  try {
+    const r = await fetch(url);
+    if (r.ok) toast('✓ サーバーに到達できました'); else toast('応答エラー: HTTP ' + r.status, true);
+  } catch (e) { toast('接続できません: ' + e.message, true); }
+});
+$('btn-show-help').addEventListener('click', () => openModal('modal-setup'));
+
+$('btn-export').addEventListener('click', () => {
+  downloadFile(`lunch-order-backup-${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(state, null, 2), 'application/json');
+});
+$('btn-import').addEventListener('click', () => {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'application/json';
+  input.onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        const imported = JSON.parse(r.result);
+        if (!imported.soloMenu && !imported.organizer) throw new Error('形式が違います');
+        if (!confirm('現在のデータを上書きします。よろしいですか？')) return;
+        state = migrate(imported); saveData();
+        toast('読込みました'); location.reload();
+      } catch (err) { toast('読込エラー: ' + err.message, true); }
+    };
+    r.readAsText(f);
+  };
+  input.click();
+});
+$('btn-clear').addEventListener('click', () => {
+  if (!confirm('全データを削除します。よろしいですか？')) return;
+  if (!confirm('本当に削除しますか？元に戻せません。')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  location.reload();
+});
+
+$('btn-show-onboarding').addEventListener('click', () => {
+  state.config.onboardingDone = false; saveData();
+  startOnboarding();
+});
+
+//=============================================================
+// オンボーディング
+//=============================================================
+const ONBOARDING_STEPS = [
+  {
+    art: '迎',
+    title: 'お昼の注文へようこそ',
+    body: '<p>毎日のお昼を、もっと楽に・楽しく。<br>このアプリは2つの使い方ができます。</p><p style="margin-top:12px;background:var(--washi-warm);padding:10px;border-radius:8px;font-size:13px;"><b>📱 自分用</b><br>お気に入りメニューから今日のお昼をワンタップで決定</p><p style="margin-top:8px;background:var(--washi-warm);padding:10px;border-radius:8px;font-size:13px;"><b>👥 みんなで</b><br>職場のお弁当注文を取りまとめ・自動集計</p>'
+  },
+  {
+    art: '独',
+    title: '自分用モード',
+    body: '<p>「お気に入りメニュー」によく行くお弁当を登録しておけば、ボタン1つで今日のランチが決まります。</p><p>「ルーレット」演出や「前回と違うのに」も使えます。</p><p style="font-size:12px;color:var(--sumi-faded);margin-top:12px;">完全オフラインで動きます。データはこの端末に保存。</p>'
+  },
+  {
+    art: '皆',
+    title: 'みんなで注文モード',
+    body: '<p><b>注文係</b>：今日のメニューを登録 → URLを発行 → 職場LINEに貼る → 自動集計＆発注書印刷</p><p><b>注文する人</b>：URLを開いて、名前と弁当を選ぶだけ</p><p style="font-size:12px;color:var(--sumi-faded);margin-top:12px;">初回だけGoogle Apps Scriptの設定が必要です（無料）。</p>'
+  },
+  {
+    art: '始',
+    title: '準備はOK',
+    body: '<p>まずは「自分用」でお気に入りメニューを2〜3品登録してみましょう。</p><p>「みんなで」を使うときは、設定タブからサーバー接続を済ませてください。</p><p style="font-size:12px;color:var(--sumi-faded);margin-top:12px;">いつでもヘッダーの「?」ボタンから使い方を見られます。</p>'
+  }
+];
+let obIndex = 0;
+function startOnboarding() {
+  obIndex = 0; renderOb();
+  openModal('modal-onboarding');
+}
+function renderOb() {
+  const s = ONBOARDING_STEPS[obIndex];
+  $('ob-body').innerHTML = `<div class="onboarding-step"><div class="ob-art">${s.art}</div><h3>${s.title}</h3>${s.body}</div>`;
+  $('ob-dots').innerHTML = ONBOARDING_STEPS.map((_, i) => `<div class="ob-dot ${i===obIndex?'active':''}"></div>`).join('');
+  $('ob-prev').disabled = obIndex === 0;
+  $('ob-next').textContent = obIndex === ONBOARDING_STEPS.length - 1 ? '始める' : '次へ';
+}
+$('ob-prev').addEventListener('click', () => { if (obIndex > 0) { obIndex--; renderOb(); } });
+$('ob-next').addEventListener('click', () => {
+  if (obIndex < ONBOARDING_STEPS.length - 1) { obIndex++; renderOb(); }
+  else { state.config.onboardingDone = true; saveData(); closeModal('modal-onboarding'); }
+});
+
+//=============================================================
+// モーダル制御
+//=============================================================
+function openModal(id) { $(id).classList.add('on'); }
+function closeModal(id) { $(id).classList.remove('on'); }
+$$('[data-close]').forEach(b => b.addEventListener('click', () => closeModal(b.dataset.close)));
+$$('.modal-bg').forEach(bg => {
+  bg.addEventListener('click', e => { if (e.target === bg) closeModal(bg.id); });
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') $$('.modal-bg.on').forEach(m => closeModal(m.id));
+});
+
+$('btn-help').addEventListener('click', () => openModal('modal-help'));
+
+//=============================================================
+// 初期化
+//=============================================================
+(function initDeadline() {
+  const d = new Date();
+  d.setHours(11, 0, 0, 0);
+  if (d < new Date()) d.setDate(d.getDate() + 1);
+  const v = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  $('org-deadline').value = v;
+})();
+
+updateAutoRefreshSwitch();
+updateNotifySwitch();
+updateGroupBadge();
+startCountdown();
+scheduleDeadlineNotification();
+
+if (new URLSearchParams(location.search).get('s')) {
+  switchMode('group');
+} else {
+  renderSolo();
+}
+
+// オンボーディング自動表示
+if (!state.config.onboardingDone) {
+  setTimeout(startOnboarding, 400);
+}
+
+// バックグラウンド復帰時に更新
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && state.organizer.sessionId) fetchOrders();
+});
+</script>
+</body>
+</html>
