@@ -1,0 +1,39 @@
+# LED化工事 案件入力（サンプル：野球場）
+project:
+  name: 浦安市運動公園野球場 LED照明改修工事
+  location: 千葉県浦安市舞浜2-27
+  client: 浦安市
+  fiscal_year: 2026
+  category: 工事  # 工事 / 委託
+
+facility:
+  type: baseball       # baseball / tennis / track_field / soccer / multi
+  use_class: practice  # official / practice (公式試合用 / 練習用)
+  dimensions:
+    infield_m2: 4000   # 内野面積
+    outfield_m2: 9000  # 外野面積
+  has_night_use: true
+
+existing_lighting:
+  poles: 6              # 照明柱数
+  fixtures_per_pole: 4  # 1柱あたり灯具数
+  lamp_type: metal_halide  # mercury / metal_halide / halogen
+  lamp_watt: 1000       # 1灯あたりW
+  total_fixtures: 24
+  annual_usage_hours: 600  # 年間点灯時間（推定）
+  installed_year: 2005
+  pole_height_m: 20
+  pole_reuse: true      # 支柱再利用可否
+
+scope:
+  fixture_replacement: true
+  pole_replacement: false
+  control_panel_upgrade: true
+  dimming_control: false
+  wiring_renewal: partial  # full / partial / none
+
+constraints:
+  construction_period_days: 60
+  night_construction: false
+  events_during_construction: false
+  budget_limit_yen: 30000000  # 任意
