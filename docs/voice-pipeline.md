@@ -1,6 +1,6 @@
 # 業務録音処理パイプライン 設計仕様書
 
-> 浦安市市民スポーツ課・遠藤啓祐の業務録音(電話・対面)を、**Apple Watch 録音 → iCloud同期 → 自動Drive投入** → 構造化された日次まとめまで自動処理するパイプライン。Claude Code 実装用の指針ドキュメント。
+> 浦安市市民スポーツ課・遠藤啓祐の業務録音(電話・対面)を、**Apple Watch + VoxRec での録音 → Google Drive 自動アップロード** → 構造化された日次まとめまで自動処理するパイプライン。Claude Code 実装用の指針ドキュメント。
 
 最終更新: 2026-05-20
 
@@ -16,16 +16,20 @@
 
 ### ゴール
 
-- **Apple Watch で録音 → タップ操作なしで** 数分〜数十分後にDriveに**会話単位で構造化された日次まとめ**が並ぶ
+- **Apple Watch で1タップ録音 → 操作不要で** 数分〜数十分後にDriveに**会話単位で構造化された日次まとめ**が並ぶ
 - ToDoは Google Sheets の専用タブに自動追記
 - iPhoneに溜まったバックログも同じ inbox に放り込めば順次処理される
 
-### 録音デバイス前提
+### 録音デバイス・アプリ前提
 
-**主:** Apple Watch のボイスメモアプリ(片手で起動できる、相手の前でも目立たない)
-**従:** iPhone のボイスメモアプリ(Watch が手元にない / 長時間案件)
+**録音デバイス:**
+- **主:** Apple Watch(片手で起動、相手の前でも目立たない、iPhoneが手元になくても可)
+- **従:** iPhone(Watchが手元にない / 長時間案件)
 
-Apple Watch で録音した内容は iCloud 経由で iPhone のボイスメモアプリに自動同期される(数十秒〜数分の遅延あり)。Shortcut/Automation はすべて iPhone 側で動作する。
+**録音アプリ:** **VoxRec**(iOS / watchOS、録音機能とクラウドバックアップ機能は無料)
+- 標準ボイスメモアプリは使わない(理由:Personal Automation / Shortcut で確実に Drive 投入する経路が iOS の仕様変更に振り回されやすいため)
+- VoxRec の自社AI文字起こし機能は **使わない**(設定で Off / 課金しない)。文字起こしは ThinkPad 側で実施
+- 採用理由詳細は §11 を参照
 
 -----
 
@@ -45,10 +49,11 @@ Apple Watch で録音した内容は iCloud 経由で iPhone のボイスメモ�
 1. **音声ファイルは可能な限りローカル(ThinkPad)で処理し、クラウドAPIに送らない**
 2. **テキスト化された後、Claude API送信前にPIIマスキングを通す**
 3. クラウドAPI事業者のデータ取扱方針はAnthropicのみ確認済(API入力は学習に使わず短期保持)。他社利用時は都度確認
+4. **VoxRec の自社AI文字起こしは使わない**(音声がVoxRec/サードパーティに渡るのを避ける)。アプリは録音+Google Drive アップロード経路のみ利用
 
 ### 2.2 シンプルさ優先
 
-- iPhone 側のロジックは Automation 1個に集約(タップ不要)。手動 Shortcut はフォールバック用
+- iPhone 側のロジックは VoxRec の設定だけ(Shortcut / Automation を書かない)
 - 処理本体は ThinkPad 側に集約。1箇所だけ動けばよい状態に
 - 既存の GAS / Sheets パイプライン(短尺ボイスメモ用)とは別系統。共通化は将来検討
 
@@ -58,7 +63,7 @@ Phase 1〜5に分け、各Phase単独で価値が出る形にする。Phase 1+3�
 
 ### 2.4 「全部とりあえずinboxに入れる」前提
 
-Automation で自動投入される以上、テスト録音・誤起動・無音・私的会話も混ざる。**inbox の入口側で軽くフィルタ(長さ・無音率)し、本格的な絞り込みは Claude API 段で「業務に関係ない会話は出力しない」プロンプトで吸収する**設計とする。
+VoxRec で録音すれば自動的に Drive に入る運用なので、テスト録音・誤起動・無音・私的会話も混ざる。**inbox の入口側で軽くフィルタ(長さ・無音率)し、本格的な絞り込みは Claude API 段で「業務に関係ない会話は出力しない」プロンプトで吸収する**設計とする。
 
 -----
 
@@ -67,14 +72,12 @@ Automation で自動投入される以上、テスト録音・誤起動・無音
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Apple Watch (主) / iPhone (従)                               │
-│   標準ボイスメモアプリで録音                                  │
+│   VoxRec で録音                                              │
+│   (Watch はコンプリケーションから1タップ起動)                │
 │         │                                                     │
-│         ▼ iCloud 自動同期(数十秒〜数分)                     │
-│   iPhone のボイスメモアプリに新規アイテムが出現               │
-│         │                                                     │
-│         ▼ Personal Automation「新規ボイスメモ → Drive保存」  │
+│         ▼ 録音終了 → Watch から iPhone へ転送(数秒〜数十秒) │
+│         ▼ VoxRec の自動バックアップで Google Drive へ        │
 │   Google Drive: ボイス録音/inbox/YYYYMMDD_HHMMSS.m4a         │
-│   (手動フォールバック: 共有シート → Shortcut「録音をinboxへ」)│
 └─────────────────────────────────────────────────────────────┘
                           │
                           ▼  (Drive API でThinkPadが取得)
@@ -87,31 +90,22 @@ Automation で自動投入される以上、テスト録音・誤起動・無音
 │   ⓪ 軽フィルタ: 長さ < 10s / 無音率 > 95% → skipped/ へ       │
 │         │                                                     │
 │         ▼                                                     │
-│   ① faster-whisper large-v3 (ローカル)                      │
-│      → タイムスタンプ付き文字起こし                          │
+│   ① WhisperX (ローカル)                                      │
+│      → タイムスタンプ付き文字起こし(+ Phase 2 で話者ラベル) │
 │      ※ initial_prompt に浦安市・市民スポーツ課の用語集を投入  │
 │         │                                                     │
 │         ▼                                                     │
-│   ② pyannote-audio (ローカル、HFトークン使用) ※Phase 2      │
-│      → 話者ラベル(Speaker_A, Speaker_B, ...)                │
-│      ※ Apple Watch 録音はモノラル/距離差小で精度不安定。     │
-│        実データで効果を確認してから導入                       │
-│         │                                                     │
-│         ▼                                                     │
-│   ③ アライメント: 話者ラベル付き文字起こし                  │
-│         │                                                     │
-│         ▼                                                     │
-│   ④ PIIマスキング層                                          │
+│   ② PIIマスキング層                                          │
 │      電話番号・メール・特定パターンを伏字化                  │
 │         │                                                     │
 │         ▼                                                     │
-│   ⑤ Claude API (構造化要約・ToDo抽出)                       │
-│      入力: マスク後の話者付き文字起こし                      │
+│   ③ Claude API (構造化要約・ToDo抽出)                       │
+│      入力: マスク後の文字起こし                              │
 │      出力: JSON(トピック分割・相手・要点・ToDo)            │
 │      ※ 業務外の会話は空配列で返すよう指示                    │
 │         │                                                     │
 │         ▼                                                     │
-│   ⑥ Markdown生成 + Sheets追記                                │
+│   ④ Markdown生成 + Sheets追記                                │
 └─────────────────────────────────────────────────────────────┘
                           │
                           ▼
@@ -128,49 +122,37 @@ Automation で自動投入される以上、テスト録音・誤起動・無音
 
 ## 4. コンポーネント詳細
 
-### 4.1 iPhone 側 - Automation 主案 + Shortcut フォールバック
+### 4.1 iPhone / Apple Watch 側 - VoxRec の設定
 
-#### 4.1.1 Personal Automation「新規ボイスメモ → inbox」(主案)
+**目的:** Apple Watch で録音 → ユーザー操作なしで Google Drive inbox に到着させる。iOS の Shortcut / Personal Automation を一切書かない。
 
-**目的:** Apple Watch で録音 → iCloud 同期 → タップなしで Drive inbox に自動投入。
+#### 4.1.1 iPhone 側セットアップ
 
-**設定場所:** iPhone「ショートカット」アプリ → オートメーション → 個人用オートメーション
+1. App Store から **VoxRec**(無料)をインストール
+2. アプリを開いて、Settings → **Siri & Cloud Sync** → **Set up Backup Folder** をタップ
+3. **Google Drive** を選択し、業務用 Google アカウントで認証
+4. バックアップ先フォルダを `ボイス録音/inbox/` に指定
+5. **Auto backup** を ON(録音停止時に自動アップロード)
+6. **自社AI文字起こし機能(Live Transcription / Speech-to-Text)** を OFF
+7. (任意)録音フォーマット: m4a, 44.1kHz, モノラル / 64kbps程度(後段の Whisper 入力として十分)
 
-**トリガー:**
-- iOS の Personal Automation には「新規ボイスメモ作成時」の直接トリガーは存在しない
-- 代替案 A: ボイスメモアプリを開いたとき/閉じたとき → 直近の未処理アイテムを Drive 保存
-- 代替案 B: Apple Watch のショートカット起動を組み合わせ、録音終了時にショートカット側から手動キック(タップは1回)
-- 代替案 C: iCloud Drive の特定フォルダ書き込みをトリガーにする回避策
+#### 4.1.2 Apple Watch 側セットアップ
 
-→ **実装着手時に iOS 最新仕様を確認して決定。動かなければ §4.1.2 の手動 Shortcut にフォールバック。**
+1. Watch の文字盤を長押し → 編集 → コンプリケーションに **VoxRec** を追加
+2. 文字盤を1タップ → 録音開始
+3. もう1タップ → 停止 → 自動的に iPhone へ転送 → iPhone が Drive へアップロード
 
-**アクション構成(候補):**
-1. ボイスメモから最新アイテムを取得
-2. 既に処理済みかチェック(直近処理ファイル名を iCloud のメモに記録など)
-3. ファイルを保存 → `Google Drive / ボイス録音 / inbox /`
-4. ファイル名: `YYYYMMDD_HHMMSS_<元ファイル名>.m4a`
-5. (オプション)通知「inboxへ送信」
+#### 4.1.3 録音時の注意
 
-#### 4.1.2 手動 Shortcut「録音をinboxへ」(フォールバック)
-
-**目的:** Automation が暴発しない/動かない場合の、共有シートからの 2タップ投入。
-
-**アクション構成(3ステップ):**
-1. 共有シートから受け取る(オーディオファイル)
-2. ファイルを保存 → `Google Drive / ボイス録音 / inbox /`
-3. 通知「録音をinboxに保存しました」を表示
-
-**現行Shortcutからの変更点:**
-- ❌ オーディオファイルをテキストに文字起こし → 削除
-- ❌ 変数設定 → 削除
-- ❌ Forms URL の内容を取得 → 削除
-- ✅ ファイル保存(Drive) → 新規追加
+- VoxRec の **自社AI文字起こし(Live Dictation)を絶対に有効にしない**(音声が VoxRec の文字起こしサーバに送られる)
+- バックアップ完了通知が iPhone に出ることを最初の1週間は毎回確認(Drive に到着しているか目視)
+- 録音中に「アップロード前提なので個人情報は最小限に」と意識づけ(=PIIマスキングは保険、運用で防ぐのが本筋)
 
 ### 4.2 Driveフォルダ構造
 
 ```
 ボイス録音/
-├── inbox/        ← Automation/Shortcutが保存。未処理ファイル
+├── inbox/        ← VoxRec が保存。未処理ファイル
 ├── processing/   ← 処理中(ロック用)。任意
 ├── processed/    ← 処理完了後の元ファイル(月別サブフォルダ推奨)
 │   ├── 2026-05/
@@ -191,7 +173,7 @@ Automation で自動投入される以上、テスト録音・誤起動・無音
 - ThinkPad X13 Gen 6 "bronzeman"
 - Windows 11 + WSL2 (Ubuntu) 推奨。Pythonをネイティブ運用するならPowerShell側でも可
 - Python 3.11+
-- GPU: Intel Arc(統合) → faster-whisper は CPUモードで運用想定(Intel Core Ultra 5 で large-v3 が実用速度)
+- GPU: Intel Arc(統合) → WhisperX は CPUモードで運用想定(Intel Core Ultra 5 で large-v3 が実用速度)
 
 #### 4.3.2 主要ライブラリ
 
@@ -200,15 +182,14 @@ Automation で自動投入される以上、テスト録音・誤起動・無音
 |Drive操作   |`google-api-python-client` |サービスアカウント認証推奨     |
 |ファイル監視    |`watchdog`                 |リアルタイム検知          |
 |軽フィルタ     |`pydub` / `librosa`        |長さ・RMS判定          |
-|文字起こし     |`faster-whisper`           |`large-v3` モデル    |
-|話者分離      |`pyannote.audio`           |Phase 2、HFトークン要   |
+|文字起こし+話者分離 |`whisperx`             |faster-whisper + pyannote を統合した完成品 |
 |PIIマスキング  |`re` + `spacy` + `ja_ginza`|正規表現+固有名詞認識       |
 |Claude API|`anthropic`                |公式SDK             |
 |Sheets操作  |`gspread`                  |OAuth or サービスアカウント|
 
-#### 4.3.3 ⓪ 軽フィルタ(Automation時代の新規ステップ)
+#### 4.3.3 ⓪ 軽フィルタ
 
-Automation で全録音が流れ込むので、Whisper を回す前に明らかなノイズを除外する。
+VoxRec で全録音が流れ込むので、WhisperX を回す前に明らかなノイズを除外する。
 
 ```python
 from pydub import AudioSegment
@@ -225,16 +206,22 @@ def should_skip(audio_path) -> tuple[bool, str]:
     return False, ""
 ```
 
-#### 4.3.4 faster-whisper 設定
+#### 4.3.4 WhisperX 設定(文字起こし + 話者分離を1本化)
+
+faster-whisper と pyannote を別々に組まず、両者を統合済みの **WhisperX** を採用する。Phase 1 では `diarize=False` で文字起こしのみ、Phase 2 で `diarize=True` を有効化する。
 
 ```python
-from faster_whisper import WhisperModel
+import whisperx
 
-model = WhisperModel(
+device = "cpu"
+compute_type = "int8"
+
+# 1. 文字起こし(Phase 1 から有効)
+model = whisperx.load_model(
     "large-v3",
-    device="cpu",
-    compute_type="int8",   # CPU運用時はint8が高速
-    cpu_threads=8,
+    device=device,
+    compute_type=compute_type,
+    language="ja",
 )
 
 INITIAL_PROMPT = (
@@ -244,36 +231,32 @@ INITIAL_PROMPT = (
     # …用語集として別ファイル管理し、ここに展開
 )
 
-segments, info = model.transcribe(
-    audio_path,
-    language="ja",
-    vad_filter=True,
-    vad_parameters=dict(min_silence_duration_ms=500),
-    word_timestamps=True,
-    initial_prompt=INITIAL_PROMPT,
+audio = whisperx.load_audio(audio_path)
+result = model.transcribe(audio, initial_prompt=INITIAL_PROMPT)
+
+# 2. アライメント(単語レベルタイムスタンプ)
+align_model, metadata = whisperx.load_align_model(
+    language_code="ja", device=device
 )
-```
-
-#### 4.3.5 pyannote-audio 設定(Phase 2、要効果検証)
-
-```python
-from pyannote.audio import Pipeline
-
-pipeline = Pipeline.from_pretrained(
-    "pyannote/speaker-diarization-3.1",
-    use_auth_token=os.environ["HF_TOKEN"],
+result = whisperx.align(
+    result["segments"], align_model, metadata, audio, device=device
 )
 
-diarization = pipeline(audio_path)
-# → 話者セグメント (start_time, end_time, speaker_label)
+# 3. 話者分離(Phase 2 で有効化、HF_TOKEN 要)
+if DIARIZE_ENABLED:
+    diarize_model = whisperx.DiarizationPipeline(
+        use_auth_token=os.environ["HF_TOKEN"], device=device
+    )
+    diarize_segments = diarize_model(audio)
+    result = whisperx.assign_word_speakers(diarize_segments, result)
 ```
 
-**Apple Watch 録音の懸念:**
+**Apple Watch 録音特性に対する想定:**
 - モノラル・帯域狭め・自分と相手の距離が近い → 話者分離が不安定になりやすい
 - Phase 1+3 で1〜2週間運用してから「話者ラベル無しでも要約品質は十分か」を判断
-- 不要と判断したら Phase 2 はスキップ
+- 不要と判断したら Phase 2 はスキップ可
 
-#### 4.3.6 PIIマスキング戦略
+#### 4.3.5 PIIマスキング戦略
 
 **機械的にマスクするパターン:**
 
@@ -291,7 +274,7 @@ diarization = pipeline(audio_path)
 
 **マスク辞書:** `pii_dict.yaml` を別管理し、運用しながら拡充
 
-#### 4.3.7 Claude API 構造化プロンプト(雛形)
+#### 4.3.6 Claude API 構造化プロンプト(雛形)
 
 ```
 以下はある業務日の音声を文字起こししたものです。話者ラベルとタイムスタンプ付き。
@@ -324,7 +307,9 @@ diarization = pipeline(audio_path)
 - JSONのみ返す、Markdownや前置きは不要
 ```
 
-#### 4.3.8 出力Markdown形式
+参考: jessedc/claude-apple-voice-memos-skill の SKILL.md に同種のプロンプトがあるので、運用しながら良い表現を吸収する。
+
+#### 4.3.7 出力Markdown形式
 
 ```markdown
 # 業務記録 2026-05-20(水)
@@ -366,14 +351,13 @@ PCを常時起動しない場合や、watchdog の負荷が気になる場合は
 
 |Phase|内容                                             |完了条件                          |想定工数  |
 |-----|-----------------------------------------------|------------------------------|------|
-|**1**|手動 Shortcut + Drive inbox + 軽フィルタ + faster-whisper|録音を放り込んだら、生の文字起こしテキストがDriveに出る|半日    |
-|**1.5**|Personal Automation 化(タップ不要)               |Apple Watch 録音が同期後に自動で inbox に入る|半日    |
-|**2**|pyannote-audio ローカル組み込み(要効果検証)         |話者ラベルが付いて、Phase 1+3 比で要約品質が明確に向上 |1日    |
+|**1**|VoxRec 設定 + Drive inbox + 軽フィルタ + WhisperX 文字起こし|Watchで録音したら数分後にDriveに生の文字起こしテキストが出る|半日    |
+|**2**|WhisperX の話者分離フラグを有効化(要効果検証)        |話者ラベルが付いて、Phase 1+3 比で要約品質が明確に向上 |半日   |
 |**3**|Claude APIで構造化Markdown生成                       |`業務記録/YYYY-MM-DD.md` が自動生成される |半日    |
 |**4**|PIIマスキング層追加 + Sheets ToDo同期                    |マスク後にClaude APIへ、ToDoが別シートに溜まる|1日    |
 |**5**|Reminders連携、エラー処理、再実行UI                        |期限付きToDoがApple Remindersに     |余裕がある時|
 
-**Phase 1+3 でMVP完成。** ペタペタ貼る運用はここで卒業できる。Phase 1.5 で完全自動化、Phase 2,4 は品質向上、Phase 5 は運用最適化。
+**Phase 1+3 でMVP完成。** ペタペタ貼る運用はここで卒業できる。Phase 2,4 は品質向上、Phase 5 は運用最適化。WhisperX 採用で Phase 2 は「フラグを立てるだけ」のコストになった。
 
 -----
 
@@ -391,7 +375,7 @@ DRIVE_DAILY_OUTPUT_FOLDER_ID=xxxxxxxxxxxxxxxx
 SHEETS_TODO_SHEET_ID=xxxxxxxxxxxxxxxx
 SHEETS_TODO_TAB_NAME=ToDo
 
-# Hugging Face (pyannote)
+# Hugging Face (WhisperX 話者分離用、Phase 2 で必要)
 HF_TOKEN=hf_xxxxxxxxxxxxxxxx
 
 # Anthropic
@@ -401,6 +385,7 @@ ANTHROPIC_MODEL=claude-opus-4-7
 # パイプライン設定
 WHISPER_MODEL=large-v3
 WHISPER_DEVICE=cpu
+DIARIZE_ENABLED=false
 POLLING_INTERVAL_SECONDS=900
 SKIP_DURATION_THRESHOLD_S=10
 SKIP_SILENCE_RATIO=0.95
@@ -412,9 +397,10 @@ SKIP_SILENCE_RATIO=0.95
 
 |項目                  |金額           |備考                      |
 |--------------------|-------------|------------------------|
-|pyannote.ai クラウド版 解約|**-¥3,000**  |ローカル版に移行                |
-|OpenAI Whisper API  |¥0           |使わない(faster-whisperローカル)|
-|Anthropic Claude API|+¥500〜1,500  |構造化要約のみ、Automation化で件数↑ |
+|pyannote.ai クラウド版 解約|**-¥3,000**  |WhisperX(ローカル)に移行         |
+|OpenAI Whisper API  |¥0           |使わない(WhisperXローカル)|
+|VoxRec              |¥0           |録音+Driveバックアップは無料機能のみ利用|
+|Anthropic Claude API|+¥500〜1,500  |構造化要約のみ、録音件数次第       |
 |Google Drive/Sheets |¥0           |既存枠内                    |
 |**差し引き**            |**既存より下がる方向**|                        |
 
@@ -422,9 +408,7 @@ SKIP_SILENCE_RATIO=0.95
 
 ## 8. オープン論点(実装中に判断)
 
-- [ ] **Apple Watch → iPhone 同期完了の検知方法**(Automationトリガーが直接対応していないため代替が必要)
-- [ ] **Automation で同じファイルを二重投入しない方法**(処理済みファイル名を iCloud メモ/ローカルに記録)
-- [ ] 録音ファイル名規則: Shortcut側で日時付与するか、Drive側のメタデータに任せるか
+- [ ] 録音ファイル名規則: VoxRec 側で日時付与するか、Drive側のメタデータに任せるか
 - [ ] 軽フィルタの閾値(10秒・無音95%)は実データで調整
 - [ ] PIIマスキングで「自分(遠藤)」の発言は伏字化するか → 不要で確定
 - [ ] 雑談・私的内容のフィルタリング基準(Claudeプロンプトで吸収、別ステップは作らない方針で確定)
@@ -432,6 +416,8 @@ SKIP_SILENCE_RATIO=0.95
 - [ ] 1日の業務終了後に Slack/メール通知で「本日のまとめできました」リンクを送るか
 - [ ] バックログ(過去の文字起こし)の一括取込みUI
 - [ ] Apple Watch 録音のサンプリングレート / モノラル品質が Whisper 精度に与える影響を初週で実測
+- [ ] VoxRec の Google Drive アップロード失敗時の検知・通知方法(アプリ通知頼みでよいか)
+- [ ] VoxRec の無料機能制限が将来変わった場合の代替アプリ(RecorderHQ / Just Press Record + iCloud Drive)
 
 -----
 
@@ -440,13 +426,14 @@ SKIP_SILENCE_RATIO=0.95
 |リスク                        |緩和策                                            |
 |---------------------------|-----------------------------------------------|
 |ThinkPad が長期間オフ → 録音が溜まる   |inbox に貯まり続けるだけなので、起動時に順次処理されればOK              |
-|**Apple Watch → iPhone iCloud同期の遅延**|Drive投入タイミングが録音から数十秒〜数分ずれる前提で運用。即時性が必要な案件はiPhone直接録音|
-|**Automation 暴発による雑音流入**|軽フィルタ(⓪)+ Claudeプロンプトで業務外を空配列に寄せる二段構え|
-|**Apple Watch 録音の音質**|モノラル・帯域狭め。faster-whisper large-v3 は耐えるが、`initial_prompt` で業務用語を必ず投入。重要案件は iPhone 録音を選択|
+|**Apple Watch → iPhone 転送遅延 / VoxRec の Drive アップロード遅延**|録音から Drive 到着まで数十秒〜数分の遅延を前提に運用。即時性が必要な案件は iPhone で直接 VoxRec 起動|
+|**VoxRec の無料機能仕様変更 / サービス停止**|録音は標準 m4a なのでアプリ依存度は低い。代替候補(RecorderHQ / Just Press Record + iCloud Drive)を §8 に記録|
+|**VoxRec の自社AI機能を誤ってON**|セットアップ後に必ず Off を確認。設定スクリーンショットを残す|
+|**Apple Watch 録音の音質**|モノラル・帯域狭め。WhisperX large-v3 は耐えるが、`initial_prompt` で業務用語を必ず投入。重要案件は iPhone 録音を選択|
 |PIIマスキング漏れ                 |段階的に正規表現と辞書を拡充、運用ログでチェック                       |
 |Claude API のJSON出力フォーマット崩れ |`response_format` 指定、パース失敗時は再試行 + raw出力をfailedへ|
-|faster-whisper の精度不足       |業務固有用語の `initial_prompt` を辞書化(浦安市・市民スポーツ課の用語集) |
-|pyannote-audio の話者ラベルが安定しない|話者数の事前指定パラメータを活用、Apple Watch録音では効果限定的なのでPhase 2は要検証 |
+|WhisperX の精度不足           |業務固有用語の `initial_prompt` を辞書化(浦安市・市民スポーツ課の用語集) |
+|WhisperX の話者ラベルが安定しない|Apple Watch録音では距離差が小さく難易度高め。Phase 2 は要効果検証、効果不十分なら無効のまま運用 |
 
 -----
 
@@ -457,12 +444,38 @@ SKIP_SILENCE_RATIO=0.95
 3. `requirements.txt` 作成
 4. `.env` テンプレ作成、必要なAPIキー取得
 5. Google Cloud Console でサービスアカウント作成、Drive/Sheets共有設定
-6. Hugging Face トークン取得、pyannote の利用規約に同意(Phase 2用、後回し可)
-7. Phase 1 のスクリプト雛形作成: `pipeline/phase1_transcribe.py`
-8. iPhone Shortcut の改修(手動版を先に動かす、§4.1.2)
-9. テスト用音声(Apple Watch 録音を実機で1〜2件)で end-to-end 動作確認
-10. Phase 1.5 として Automation を構築(§4.1.1)
-11. cron / watchdog 常駐化
+6. iPhone に VoxRec をインストール、Google Drive バックアップを設定(§4.1.1)
+7. Apple Watch のコンプリケーションに VoxRec を配置(§4.1.2)
+8. 試し録音1〜2件 → Drive `inbox/` に届くことを確認
+9. Hugging Face トークン取得、pyannote の利用規約に同意(Phase 2用、後回し可)
+10. Phase 1 のスクリプト雛形作成: `pipeline/phase1_transcribe.py`
+11. テスト用音声で end-to-end 動作確認
+12. cron / watchdog 常駐化
+
+-----
+
+## 11. 採用アプリの選定理由(VoxRec)
+
+Apple Watch 録音アプリは複数あるが、本パイプラインの要件は次の通り:
+
+1. Apple Watch から単独で録音できる
+2. 録音ファイルが ThinkPad の届く場所(=Google Drive)に到着する
+3. 音声がサードパーティAI(OpenAI等)に渡らない経路で実現できる
+4. 日本語環境で問題なく動く
+5. ランニングコストが低い
+
+主な候補と評価:
+
+|アプリ                |評価                                |
+|--------------------|----------------------------------|
+|VoxRec(採用)|**録音+Google Drive バックアップが無料**。Watch単独録音可・日本語自動句読点対応。自社AIは Off で運用可|
+|Just Press Record|$4.99 買切り。Apple純正オンデバイス文字起こし内蔵で PII 的に最安全。**ただし保存先が iCloud Drive 限定** → Google Drive 主軸の本構成と相性悪|
+|RecorderHQ|Google Drive 対応・Watch対応。日本語精度の評判が見つけにくく VoxRec 優先|
+|Awesome Voice Recorder|月額$3.99〜。機能多いが料金体系が VoxRec より重い|
+|Whisper Notes / MacWhisper|オフライン Whisper 内蔵で究極のプライバシー。**ただしファイル取り出しが面倒**でパイプラインへの接続コストが高い|
+|Whisper Memos|録音→AI要約まで自動。**音声が OpenAI に送信される** → §2.1 の原則に反するため不採用|
+
+将来 VoxRec の仕様変更や Google Drive 連携の不具合が発生した場合の差替候補は RecorderHQ → Just Press Record + iCloud Drive(パイプラインを iCloud 軸に書換) の順で検討する。
 
 -----
 
