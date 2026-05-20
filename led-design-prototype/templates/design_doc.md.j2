@@ -1,0 +1,100 @@
+# {{ project.name }} 設計書（ドラフト）
+
+**発注者**: {{ project.client }}
+**工事場所**: {{ project.location }}
+**年度**: {{ project.fiscal_year }}
+**区分**: {{ project.category }}
+**作成日**: {{ generated_at }}
+
+---
+
+## 1. 工事概要
+
+{{ ai_sections.overview }}
+
+## 2. 設計方針
+
+{{ ai_sections.design_policy }}
+
+## 3. 既存設備の状況
+
+### 3.1 既存照明設備
+
+| 項目 | 内容 |
+|---|---|
+| 照明柱数 | {{ existing.poles }} 基 |
+| 1柱あたり灯具数 | {{ existing.fixtures_per_pole }} 灯 |
+| 既存光源 | {{ existing.lamp_type_jp }} {{ existing.lamp_watt }}W |
+| 総灯数 | {{ existing.total_fixtures }} 灯 |
+| 既存総消費電力 | {{ existing.total_watt_kw }} kW |
+| 設置年 | {{ existing.installed_year }} 年 |
+| 支柱高 | {{ existing.pole_height_m }} m |
+| 年間点灯時間 | {{ existing.annual_usage_hours }} h |
+
+### 3.2 既存設備の課題
+
+{{ ai_sections.existing_issues }}
+
+## 4. 計画概要
+
+### 4.1 照度計算
+
+{{ illuminance_calc_table }}
+
+### 4.2 LED灯具の選定
+
+{{ ai_sections.fixture_selection }}
+
+### 4.3 工事範囲
+
+{{ ai_sections.scope }}
+
+## 5. 省エネ・経済効果
+
+{{ economic_effect_table }}
+
+{{ ai_sections.economic_narrative }}
+
+## 6. 特記仕様
+
+{{ ai_sections.special_specifications }}
+
+## 7. 施工計画
+
+{{ ai_sections.construction_plan }}
+
+## 8. 検査・試験
+
+{{ ai_sections.inspection }}
+
+## 9. 提出書類
+
+{{ ai_sections.deliverables }}
+
+---
+
+## 付録A: 概算工事費
+
+{{ cost_estimate_table }}
+
+注：上記は公開情報ベースの概算。確定積算は浦安市公共工事設計労務単価および最新メーカー見積に基づく。
+
+## 付録B: 適用基準・参考文献
+
+- 公共建築工事標準仕様書（電気設備工事編）
+- JIS Z 9127 屋外スポーツ施設の照明基準
+- 電気設備技術基準・解釈
+- 内線規程（JEAC 8001）
+- 浦安市公共工事共通仕様書
+
+---
+
+**注意事項**
+
+本設計書はAIによる自動生成ドラフトです。実際の発注・施工前に下記の確認が必須です：
+
+1. 現地調査による既存設備・支柱の状態確認
+2. 電気主任技術者・有資格者による設計レビュー
+3. 浦安市指定の特記仕様書・様式への適合確認
+4. 最新メーカーカタログ・配光データによる照度シミュレーション再計算
+5. 構造計算（既存支柱再利用時）
