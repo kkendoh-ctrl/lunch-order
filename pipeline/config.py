@@ -7,7 +7,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# override=True で `.env` を Windows ユーザー環境変数より優先する。
+# 過去にユーザー環境変数に古い ANTHROPIC_API_KEY が残っていて `.env` の
+# 新キーが効かない事故が起きたため、`.env` を single source of truth に
+# 固定する。
+load_dotenv(override=True)
 
 
 def _get(key: str, default: str | None = None, required: bool = False) -> str:

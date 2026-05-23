@@ -79,6 +79,59 @@
 - `config.py` を `load_dotenv(override=True)` にする小修正を入れてくれると、同種事故が再発しなくなる (任意)
 - それ以外は実機テストの結果次第。エラーが出たらここに追記します
 
+## リモート側からの応答 (2026-05-23)
+
+- ✅ `config.py` を `load_dotenv(override=True)` に変更してコメント追記。
+  `.env` を single source of truth に固定。これで Windows ユーザー環境変数
+  が混在しても `.env` が勝つ
+- ✅ `.env.example` の `WHISPER_MODEL` コメントを更新し `large-v3-turbo`
+  を推奨デフォルトに変更(モデルサイズ・速度表も拡充)。既存 `.env` には
+  影響なし、書き換えは手動で
+- 既存テスト 93 件 pass を確認済
+
+### `WHISPER_MODEL` 変更について
+
+`large-v3-turbo` への変更を **おすすめ**:
+- bronzeman の Ultra 5 225U で large-v3 は実用的にキツい(1時間録音で
+  数時間かかる可能性)
+- turbo なら同じ録音が ~30〜45 分目安
+- 日本語→日本語の文字起こしは精度差ほぼ無し(WhisperX 開発元の
+  ベンチでも turbo の方が WER 良いケースあり)
+- 翻訳タスクには弱いが、このパイプラインは翻訳しないので無関係
+
+### 録音 142.m4a と 録音 142 (1).m4a について
+
+ファイルサイズ完全一致 (266,763,037 bytes) なら **同一バイナリの
+コピーで間違いない**(iOS の Files / Google Drive で書き出した時に
+重複登録された痕跡)。
+
+対処:
+- `(1)` の方を捨てて 142 を残す(または逆)
+- パイプライン的にはどちらも `_undated/` に行くだけなので
+  処理しても害は無いが、二重登録ノートになるので推奨は削除
+- 念のため `Compare-Object` で確認:
+  ```powershell
+  (Get-FileHash "...\録音 142.m4a").Hash
+  (Get-FileHash "...\録音 142 (1).m4a").Hash
+  ```
+  同じハッシュなら削除して OK
+
+### 初回テストでチェックしてほしいこと
+
+`python main.py test "G:\マイドライブ\01.アイデア\音声メモログ\inbox\録音 138.m4a"` で:
+
+1. WhisperX モデル DL が走る(初回のみ ~1.5GB / 数分〜十数分)
+2. 文字起こし完了後、PII マスク件数が `masked=N` で表示される
+3. Claude 構造化が走り `structured(ctx=N, in=..., out=..., cache_read=0, masked=N)` 表示
+4. Vault の `録音/_undated/録音 138.md` にノートが生成される
+   (`_undated/` になるのはファイル名が canonical じゃないため、想定内)
+5. `_reminders/todos.ics` が更新される
+
+エラーが出たらそのまま貼り付けで OK。よくありそうな罠:
+- `[WinError 2] 指定されたファイルが見つかりません` → ffmpeg が PATH に無い
+- `OutOfMemoryError` → モデルサイズを `medium` か `small` に下げる
+- `Could not find module 'libcudart.so'` → CUDA 由来。.env の `WHISPER_DEVICE=cpu` を確認
+
 ## ローカル側からの次のアクション
 
 1. `.env` の `WHISPER_MODEL` を `large-v3-turbo` に書き換え (ユーザー承認待ち)
