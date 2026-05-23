@@ -132,3 +132,76 @@ def test_list_failures_skips_unparseable(tmp_path: Path) -> None:
     fails = ft.list_failures(cfg)
     assert len(fails) == 1
     assert fails[0].audio_path.name == "13-39-19.m4a"
+
+
+# -------------------- suggest_hint --------------------
+
+
+def test_suggest_hint_ffmpeg() -> None:
+    assert ft.suggest_hint("WinError 2: ffmpeg not found") is not None
+    assert "ffmpeg" in ft.suggest_hint("WinError 2: ffmpeg not found")
+
+
+def test_suggest_hint_oom() -> None:
+    h = ft.suggest_hint("torch.OutOfMemoryError: CUDA out of memory")
+    assert h is not None
+    assert "WHISPER_MODEL" in h
+
+
+def test_suggest_hint_api_key() -> None:
+    h = ft.suggest_hint("anthropic.AuthenticationError: 401 invalid_api_key")
+    assert h is not None
+    assert "ANTHROPIC_API_KEY" in h
+
+
+def test_suggest_hint_whisperx_api() -> None:
+    h = ft.suggest_hint(
+        "TypeError: transcribe() got an unexpected keyword argument 'initial_prompt'"
+    )
+    assert h is not None
+    assert "whisperx" in h.lower()
+
+
+def test_suggest_hint_no_match() -> None:
+    assert ft.suggest_hint("totally unrelated error") is None
+    assert ft.suggest_hint("") is None
+    assert ft.suggest_hint(None) is None  # type: ignore[arg-type]
+
+
+# -------------------- cleanup_stale --------------------
+
+
+def test_cleanup_stale_removes_only_missing(tmp_path: Path) -> None:
+    cfg = _mk_cfg(tmp_path)
+    # alive: 元ファイルを実際に作る
+    alive = _audio(tmp_path)
+    alive.parent.mkdir(parents=True, exist_ok=True)
+    alive.write_bytes(b"")
+    # dead: ファイル作らない
+    dead = _audio(tmp_path, date="2026-05-99", stem="99-99-99")
+
+    ft.record_failure(cfg, alive, "transcribe", "e1")
+    ft.record_failure(cfg, dead, "transcribe", "e2")
+
+    removed = ft.cleanup_stale(cfg)
+    assert len(removed) == 1
+    assert removed[0].name == "99-99-99.m4a"
+
+    fails = ft.list_failures(cfg)
+    assert len(fails) == 1
+    assert fails[0].audio_path == alive
+
+
+def test_cleanup_stale_noop_when_all_alive(tmp_path: Path) -> None:
+    cfg = _mk_cfg(tmp_path)
+    alive = _audio(tmp_path)
+    alive.parent.mkdir(parents=True, exist_ok=True)
+    alive.write_bytes(b"")
+    ft.record_failure(cfg, alive, "transcribe", "e")
+    assert ft.cleanup_stale(cfg) == []
+    assert len(ft.list_failures(cfg)) == 1
+
+
+def test_cleanup_stale_empty_failure_dir(tmp_path: Path) -> None:
+    cfg = _mk_cfg(tmp_path)
+    assert ft.cleanup_stale(cfg) == []

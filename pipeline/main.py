@@ -171,6 +171,15 @@ def info() -> None:
     if cfg.pii_dict_path:
         click.echo(f"  exists: {cfg.pii_dict_path.exists()}")
 
+    # 失敗マーカー
+    failed_count = len(failure_tracker.list_failures(cfg))
+    if failed_count:
+        click.echo("")
+        click.echo(
+            f"⚠ 失敗マーカー: {failed_count} 件 "
+            f"(`python main.py failed` で詳細, `retry` で再実行)"
+        )
+
     files = watcher.iter_audio_files(cfg.jpr_inbox)
     click.echo(f"\n見つかった音声ファイル: {len(files)}")
     pending = [f for f in files if not is_already_processed(cfg, f)]
@@ -259,20 +268,52 @@ cli.add_command(structure_cmd, name="structure")
 
 
 @cli.command()
-def failed() -> None:
-    """失敗マーカー (_failed/) を一覧表示。"""
+@click.option(
+    "--clean-stale",
+    is_flag=True,
+    help="参照先の音声ファイルが消えてるマーカーを削除",
+)
+def failed(clean_stale: bool) -> None:
+    """失敗マーカー (_failed/) を phase 別に表示。エラー内容に
+    既知パターンがあれば対処ヒントも添える。"""
     cfg = Config.load()
+
+    if clean_stale:
+        removed = failure_tracker.cleanup_stale(cfg)
+        if not removed:
+            click.echo("消失マーカーなし。")
+        else:
+            click.echo(f"消失マーカーを {len(removed)} 件削除:")
+            for p in removed:
+                click.echo(f"  - {p}")
+        return
+
     fails = failure_tracker.list_failures(cfg)
     if not fails:
         click.echo("失敗マーカーなし。")
         return
-    click.echo(f"{len(fails)} 件の失敗マーカー:")
+
+    from collections import defaultdict
+
+    by_phase: dict[str, list] = defaultdict(list)
     for f in fails:
-        click.echo(
-            f"  [{f.phase}] {f.audio_path.name} "
-            f"(試行 {f.attempt_count} 回, 最終 {f.last_attempted_at})"
-        )
-        click.echo(f"    error: {f.error[:200]}")
+        by_phase[f.phase].append(f)
+
+    click.echo(f"{len(fails)} 件の失敗マーカー (phase 別):")
+    for phase in sorted(by_phase.keys()):
+        items = by_phase[phase]
+        click.echo("")
+        click.echo(f"[{phase}] {len(items)} 件:")
+        for f in items:
+            stale_mark = "" if f.audio_path.exists() else "  ⚠ 元ファイル消失"
+            click.echo(
+                f"  {f.audio_path.name}  試行 {f.attempt_count} 回  "
+                f"最終 {f.last_attempted_at}{stale_mark}"
+            )
+            click.echo(f"    error: {f.error[:200]}")
+            hint = failure_tracker.suggest_hint(f.error)
+            if hint:
+                click.echo(f"    hint:  {hint}")
 
 
 @cli.command()
