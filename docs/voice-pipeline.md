@@ -1,8 +1,8 @@
-# 業務録音処理パイプライン 設計仕様書
+# 音声記憶パイプライン 設計仕様書
 
-> 浦安市市民スポーツ課・遠藤啓祐の業務録音(電話・対面)を、**Apple Watch + VoxRec での録音 → Google Drive 自動アップロード** → 構造化された日次まとめまで自動処理するパイプライン。Claude Code 実装用の指針ドキュメント。
+> Apple Watch + Just Press Record で録音 → iCloud Drive 経由で ThinkPad に到着 → WhisperX で文字起こし → Claude API で構造化・エンティティ抽出 → Obsidian Vault「音声記憶」に蓄積。業務と私的を切り離さず1つの知識ベースに統合する。
 
-最終更新: 2026-05-20
+最終更新: 2026-05-23
 
 -----
 
@@ -10,26 +10,28 @@
 
 ### 現状の問題
 
-- 業務中に発生する電話・対面の会話を、iPhoneの文字起こしアプリで貯めているが、それを処理するのに「Claudeにペタペタ貼り付ける」運用になっており非効率
-- 既存のボイスメモShortcut(Google Forms経由)は途中で頓挫(Forms POSTのクエリパラメータ未設定で実質動作せず)
-- 1日の中で 10〜15 トピック(電話・打ち合わせ)が混在しており、生の文字起こしから手作業で会話単位に切り分けるのが負担
+- 業務中・私的場面の電話・対面・独り言を iPhone のアプリで貯めるだけになっている
+- 既存の「Claudeにペタペタ貼り付ける」運用は非効率かつ蓄積されない
+- 1日に 10〜20 件の会話・思考メモが混在し、後から「あの件どうなったっけ」が探せない
+- **業務領域(契約・施設管理・人事)と私的領域(知的興味・家族・趣味)は実は地続き** で、強引に分けると失われる文脈がある
 
 ### ゴール
 
-- **Apple Watch で1タップ録音 → 操作不要で** 数分〜数十分後にDriveに**会話単位で構造化された日次まとめ**が並ぶ
-- ToDoは Google Sheets の専用タブに自動追記
-- iPhoneに溜まったバックログも同じ inbox に放り込めば順次処理される
+- **Apple Watch を1タップして録音** → 数分後に **Obsidian Vault に構造化されたノートとして自動追加**
+- ノート同士が `[[人物]]` `[[トピック]]` `[[場所]]` で自動リンクされ、グラフビューで「誰の話」「何の連なり」が一目で見える
+- ToDoは横串で1ファイルに集約、重要度の高い録音もリストアップ
+- 業務/私的は分離せず1つの Vault に統合、タグで色分けする
 
 ### 録音デバイス・アプリ前提
 
 **録音デバイス:**
-- **主:** Apple Watch(片手で起動、相手の前でも目立たない、iPhoneが手元になくても可)
-- **従:** iPhone(Watchが手元にない / 長時間案件)
+- **主:** Apple Watch(コンプリケーションから1タップ、相手の前でも目立たない、iPhone 不要)
+- **従:** iPhone(Watch が手元にない / 長時間案件 / AirPods 経由)
 
-**録音アプリ:** **VoxRec**(iOS / watchOS、録音機能とクラウドバックアップ機能は無料)
-- 標準ボイスメモアプリは使わない(理由:Personal Automation / Shortcut で確実に Drive 投入する経路が iOS の仕様変更に振り回されやすいため)
-- VoxRec の自社AI文字起こし機能は **使わない**(設定で Off / 課金しない)。文字起こしは ThinkPad 側で実施
-- 採用理由詳細は §11 を参照
+**録音アプリ:** **Just Press Record**(iOS / watchOS / macOS、$4.99 買い切り)
+- 採用理由詳細は §11
+- 自動文字起こし機能は **使わない**(使ってもよいが我々は WhisperX を使う)
+- iCloud Drive の通常フォルダに `.m4a` を自動保存してくれる点が決め手
 
 -----
 
@@ -37,33 +39,39 @@
 
 ### 2.1 セキュリティ・PII保護(最重要)
 
-業務録音には以下のような機微情報が含まれる:
+業務・私的どちらの録音にも機微情報が含まれる:
 
-- 業者との価格交渉(例: ネットウィンチ電動化 3,500万円スキーム)
-- 利用者の個人情報(申請番号、電話番号、氏名)
-- 内部関係者(同僚、課長、業者担当者)の実名
-- 政治案件・市長関連の来庁者情報
+- 業務: 業者との価格交渉、利用者の個人情報、内部関係者の実名、政治案件
+- 私的: 家族・友人の本名、健康情報、財務状況、固有の意見
 
-**設計原則:**
+**原則:**
 
-1. **音声ファイルは可能な限りローカル(ThinkPad)で処理し、クラウドAPIに送らない**
-2. **テキスト化された後、Claude API送信前にPIIマスキングを通す**
-3. クラウドAPI事業者のデータ取扱方針はAnthropicのみ確認済(API入力は学習に使わず短期保持)。他社利用時は都度確認
-4. **VoxRec の自社AI文字起こしは使わない**(音声がVoxRec/サードパーティに渡るのを避ける)。アプリは録音+Google Drive アップロード経路のみ利用
+1. **音声ファイルは ThinkPad ローカルで処理し、音声をクラウドAPIに送らない**
+2. **テキスト化された後、Claude API送信前に PII マスキングを通す**
+3. Just Press Record はオンデバイス処理のみ・データ収集なしを公言、Apple iCloud のみに保存
+4. Anthropic API は入力を学習に使わず短期保持(確認済)
 
-### 2.2 シンプルさ優先
+### 2.2 業務/私的を1つの Vault に統合
 
-- iPhone 側のロジックは VoxRec の設定だけ(Shortcut / Automation を書かない)
-- 処理本体は ThinkPad 側に集約。1箇所だけ動けばよい状態に
-- 既存の GAS / Sheets パイプライン(短尺ボイスメモ用)とは別系統。共通化は将来検討
+「これは業務」「これは私的」と入口で分けない。代わりに:
 
-### 2.3 段階的構築
+- 録音ノートに **複数タグ**を付ける(`#業務`, `#私的`, `#知的興味`, `#家族` など共存可)
+- `[[]]` リンクは領域横断(例: `[[モルック大会]]` は業務でも私的でも同じノート)
+- Obsidian のグラフビューで「業務トピックと私的トピックがどこで交差してるか」を可視化
 
-Phase 1〜5に分け、各Phase単独で価値が出る形にする。Phase 1+3だけでも「ペタペタ貼る」運用から脱却可能。
+### 2.3 シンプルさ優先
 
-### 2.4 「全部とりあえずinboxに入れる」前提
+- 録音側のロジックは Just Press Record の設定だけ(Shortcut も Automation も書かない)
+- 処理本体は ThinkPad に集約
+- 既存の GAS / Sheets パイプライン(短尺ボイスメモ用)とは別系統
 
-VoxRec で録音すれば自動的に Drive に入る運用なので、テスト録音・誤起動・無音・私的会話も混ざる。**inbox の入口側で軽くフィルタ(長さ・無音率)し、本格的な絞り込みは Claude API 段で「業務に関係ない会話は出力しない」プロンプトで吸収する**設計とする。
+### 2.4 段階的構築
+
+Phase 1〜5 に分け、各 Phase 単独で価値が出る形にする。Phase 1+2 だけで「ペタペタ貼る」運用から脱却可能。
+
+### 2.5 「全部とりあえず拾う」前提
+
+Just Press Record でタップすれば自動的に iCloud Drive に入る運用なので、テスト録音・誤起動・無音・私的雑談も混ざる。**入口側で軽くフィルタ(長さ・無音率)し、本格的な絞り込みは Claude プロンプトで「業務でも知的でもない雑談は要約しない」吸収する**設計とする。
 
 -----
 
@@ -72,49 +80,55 @@ VoxRec で録音すれば自動的に Drive に入る運用なので、テスト
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Apple Watch (主) / iPhone (従)                               │
-│   VoxRec で録音                                              │
+│   Just Press Record で録音                                   │
 │   (Watch はコンプリケーションから1タップ起動)                │
 │         │                                                     │
-│         ▼ 録音終了 → Watch から iPhone へ転送(数秒〜数十秒) │
-│         ▼ VoxRec の自動バックアップで Google Drive へ        │
-│   Google Drive: ボイス録音/inbox/YYYYMMDD_HHMMSS.m4a         │
+│         ▼ 録音終了 → Watch から iPhone へ自動転送            │
+│         ▼ iPhone から iCloud Drive へ自動アップロード         │
+│   iCloud Drive: Just Press Record/YYYY-MM-DD/HH-MM-SS.m4a   │
 └─────────────────────────────────────────────────────────────┘
                           │
-                          ▼  (Drive API でThinkPadが取得)
+                          ▼  (iCloud for Windows で同期)
 ┌─────────────────────────────────────────────────────────────┐
-│ ThinkPad (bronzeman) - Python 常駐 or cron                  │
+│ ThinkPad (bronzeman) - Python 常駐 or タスクスケジューラ    │
 │                                                              │
-│   watchdog / cron(15分) → 新規ファイル検知                  │
+│   ① watchdog → iCloudDrive\Just Press Record\ の新規検知    │
 │         │                                                     │
 │         ▼                                                     │
-│   ⓪ 軽フィルタ: 長さ < 10s / 無音率 > 95% → skipped/ へ       │
+│   ② 軽フィルタ: 長さ < 10s / 無音率 > 95% → _skipped/       │
 │         │                                                     │
 │         ▼                                                     │
-│   ① WhisperX (ローカル)                                      │
-│      → タイムスタンプ付き文字起こし(+ Phase 2 で話者ラベル) │
-│      ※ initial_prompt に浦安市・市民スポーツ課の用語集を投入  │
+│   ③ WhisperX (ローカル)                                      │
+│      → タイムスタンプ付き文字起こし                          │
+│      ※ initial_prompt に業務用語+私的用語を投入              │
 │         │                                                     │
 │         ▼                                                     │
-│   ② PIIマスキング層                                          │
-│      電話番号・メール・特定パターンを伏字化                  │
+│   ④ PII マスキング層                                         │
+│      電話・メール・申請番号・家族名等を伏字化                │
 │         │                                                     │
 │         ▼                                                     │
-│   ③ Claude API (構造化要約・ToDo抽出)                       │
+│   ⑤ Claude API (構造化・エンティティ抽出・要約)             │
 │      入力: マスク後の文字起こし                              │
-│      出力: JSON(トピック分割・相手・要点・ToDo)            │
-│      ※ 業務外の会話は空配列で返すよう指示                    │
+│      出力: JSON                                              │
+│        - 1〜複数の「コンテキスト」に分割                     │
+│        - 各コンテキスト: 要約 / ToDo / 人物 / トピック / 場所│
+│        - 領域タグ(複数可): 業務/私的/知的興味/家族/健康など │
+│        - 重要度スコア(1-5)                                  │
+│      ※ 雑談は出力に含めない指示                              │
 │         │                                                     │
 │         ▼                                                     │
-│   ④ Markdown生成 + Sheets追記                                │
+│   ⑥ Obsidian Vault に Markdown 書き込み                     │
+│      - 録音/YYYY-MM-DD/HH-MM-SS.md (1録音=1ノート)          │
+│      - 日次/YYYY-MM-DD.md に [[]] 集約                      │
+│      - 人物/トピック/場所 ノートを存在しなければ自動生成     │
+│      - 一覧/ToDo.md / 一覧/重要度高.md を再生成              │
 └─────────────────────────────────────────────────────────────┘
                           │
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 出力                                                          │
-│   Drive: 業務記録/2026-05-20.md  ← 1日分まとめ              │
-│   Sheets: 業務記録ToDo タブ      ← アクション管理           │
-│   Drive: ボイス録音/processed/   ← 元ファイル移動           │
-│   Drive: ボイス録音/skipped/     ← 短尺・無音               │
+│ Obsidian Vault: iCloud Drive/音声記憶/                       │
+│   iPhone / iPad / Mac / Windows どこからでも閲覧・編集可     │
+│   グラフビューで知識マップが見える                            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -122,74 +136,80 @@ VoxRec で録音すれば自動的に Drive に入る運用なので、テスト
 
 ## 4. コンポーネント詳細
 
-### 4.1 iPhone / Apple Watch 側 - VoxRec の設定
+### 4.1 Apple Watch / iPhone 側 - Just Press Record の設定
 
-**目的:** Apple Watch で録音 → ユーザー操作なしで Google Drive inbox に到着させる。iOS の Shortcut / Personal Automation を一切書かない。
+**目的:** Apple Watch で録音 → ユーザー操作なしで iCloud Drive の `Just Press Record/` フォルダに到着させる。
 
 #### 4.1.1 iPhone 側セットアップ
 
-1. App Store から **VoxRec**(無料)をインストール
-2. アプリを開いて、Settings → **Siri & Cloud Sync** → **Set up Backup Folder** をタップ
-3. **Google Drive** を選択し、業務用 Google アカウントで認証
-4. バックアップ先フォルダを `ボイス録音/inbox/` に指定
-5. **Auto backup** を ON(録音停止時に自動アップロード)
-6. **自社AI文字起こし機能(Live Transcription / Speech-to-Text)** を OFF
-7. (任意)録音フォーマット: m4a, 44.1kHz, モノラル / 64kbps程度(後段の Whisper 入力として十分)
+1. App Store で **Just Press Record** ($4.99) を購入・インストール
+2. 初回起動でマイクと音声認識のアクセスを許可
+3. 設定 → **Cloud Storage** で **iCloud Drive** を選択(デフォルトでON)
+4. (任意) **Transcription** は OFF にする(ThinkPad 側で WhisperX を使うため)
+5. 録音テスト1件 → Files アプリで `iCloud Drive/Just Press Record/YYYY-MM-DD/HH-MM-SS.m4a` に到着するのを確認
 
 #### 4.1.2 Apple Watch 側セットアップ
 
-1. Watch の文字盤を長押し → 編集 → コンプリケーションに **VoxRec** を追加
-2. 文字盤を1タップ → 録音開始
-3. もう1タップ → 停止 → 自動的に iPhone へ転送 → iPhone が Drive へアップロード
+1. iPhone の Watch アプリ → 「文字盤ギャラリー」または現在の文字盤の編集
+2. コンプリケーションスロットに **Just Press Record** を配置
+3. Watch の文字盤を1タップ → 録音開始
+4. もう1タップ → 停止 → Watch ローカルに保存 → 自動的に iPhone へ同期 → iCloud Drive へ
 
 #### 4.1.3 録音時の注意
 
-- VoxRec の **自社AI文字起こし(Live Dictation)を絶対に有効にしない**(音声が VoxRec の文字起こしサーバに送られる)
-- バックアップ完了通知が iPhone に出ることを最初の1週間は毎回確認(Drive に到着しているか目視)
-- 録音中に「アップロード前提なので個人情報は最小限に」と意識づけ(=PIIマスキングは保険、運用で防ぐのが本筋)
+- **Watch の画面ロックで録音が停止**する(通知なし)。長尺案件は iPhone で録るか「常にオン」モードを有効化
+- 録音中に Watch の別アプリを開くとキャンセルされる
+- Watch → iPhone 同期遅延の報告あり。アプリ内の「未同期」リストを週1で確認、必要なら手動再送
 
-### 4.2 Driveフォルダ構造
+### 4.2 iCloud Drive と iCloud for Windows
+
+#### 4.2.1 フォルダ構造
 
 ```
-ボイス録音/
-├── inbox/        ← VoxRec が保存。未処理ファイル
-├── processing/   ← 処理中(ロック用)。任意
-├── processed/    ← 処理完了後の元ファイル(月別サブフォルダ推奨)
-│   ├── 2026-05/
-│   └── ...
-├── skipped/      ← 軽フィルタで除外(短尺・無音)。月別サブフォルダ
-└── failed/       ← 処理失敗ファイル(リトライ用)
-
-業務記録/
-├── 2026-05-20.md
-├── 2026-05-21.md
-└── ...
+iCloud Drive/
+├── Just Press Record/             ← JPR が自動管理。触らない
+│   ├── 2026-05-23/
+│   │   ├── 13-39-19.m4a
+│   │   └── 14-22-05.m4a
+│   └── 2026-05-24/
+│       └── ...
+│
+└── 音声記憶/                       ← Obsidian Vault (新規作成、§5 参照)
+    └── (§5 のフォルダ構成)
 ```
+
+#### 4.2.2 ThinkPad での同期
+
+- ThinkPad に **iCloud for Windows** をインストール
+- 「**iCloud Drive を File Explorer に同期**」を ON
+- Windows 上では `C:\Users\<user>\iCloud Drive\` 配下に展開される
+- WSL2 から触る場合は `/mnt/c/Users/<user>/iCloud Drive/` 経由
+
+`Just Press Record/` と `音声記憶/` の両方が ThinkPad にも同期される。
 
 ### 4.3 ThinkPad バックエンド
 
 #### 4.3.1 環境
 
 - ThinkPad X13 Gen 6 "bronzeman"
-- Windows 11 + WSL2 (Ubuntu) 推奨。Pythonをネイティブ運用するならPowerShell側でも可
+- Windows 11 + WSL2 (Ubuntu) 推奨
 - Python 3.11+
-- GPU: Intel Arc(統合) → WhisperX は CPUモードで運用想定(Intel Core Ultra 5 で large-v3 が実用速度)
+- GPU: Intel Arc(統合) → WhisperX は CPU モードで運用想定(Intel Core Ultra 5 で large-v3 が実用速度)
 
 #### 4.3.2 主要ライブラリ
 
-|用途        |ライブラリ                      |備考                |
-|----------|---------------------------|------------------|
-|Drive操作   |`google-api-python-client` |サービスアカウント認証推奨     |
-|ファイル監視    |`watchdog`                 |リアルタイム検知          |
-|軽フィルタ     |`pydub` / `librosa`        |長さ・RMS判定          |
-|文字起こし+話者分離 |`whisperx`             |faster-whisper + pyannote を統合した完成品 |
-|PIIマスキング  |`re` + `spacy` + `ja_ginza`|正規表現+固有名詞認識       |
-|Claude API|`anthropic`                |公式SDK             |
-|Sheets操作  |`gspread`                  |OAuth or サービスアカウント|
+| 用途 | ライブラリ | 備考 |
+|---|---|---|
+| ファイル監視 | `watchdog` | iCloud Drive 配下を監視 |
+| 軽フィルタ | `pydub` | 長さ・RMS判定 |
+| 文字起こし | `whisperx` | faster-whisper + 単語アライメント |
+| PIIマスキング | `re` + `spacy` + `ja_ginza` | 正規表現+固有名詞認識 |
+| Claude API | `anthropic` | 公式SDK |
+| YAML フロントマター生成 | `python-frontmatter` | Obsidian ノートの metadata |
 
-#### 4.3.3 ⓪ 軽フィルタ
+#### 4.3.3 ② 軽フィルタ
 
-VoxRec で全録音が流れ込むので、WhisperX を回す前に明らかなノイズを除外する。
+Watch のタップミスや無音録音を除外する。
 
 ```python
 from pydub import AudioSegment
@@ -199,16 +219,15 @@ def should_skip(audio_path) -> tuple[bool, str]:
     duration_s = len(audio) / 1000
     if duration_s < 10:
         return True, "too_short"
-    # 無音率: -40dBFS 未満が95%以上
     silent_chunks = sum(1 for chunk in audio[::500] if chunk.dBFS < -40)
     if silent_chunks / (len(audio) / 500) > 0.95:
         return True, "mostly_silent"
     return False, ""
 ```
 
-#### 4.3.4 WhisperX 設定(文字起こし + 話者分離を1本化)
+除外したファイルは `_skipped/YYYY-MM/` に移動(分析対象から外すが残しておく)。
 
-faster-whisper と pyannote を別々に組まず、両者を統合済みの **WhisperX** を採用する。Phase 1 では `diarize=False` で文字起こしのみ、Phase 2 で `diarize=True` を有効化する。
+#### 4.3.4 ③ WhisperX 設定
 
 ```python
 import whisperx
@@ -216,7 +235,6 @@ import whisperx
 device = "cpu"
 compute_type = "int8"
 
-# 1. 文字起こし(Phase 1 から有効)
 model = whisperx.load_model(
     "large-v3",
     device=device,
@@ -224,259 +242,302 @@ model = whisperx.load_model(
     language="ja",
 )
 
-INITIAL_PROMPT = (
-    "浦安市 市民スポーツ課 遠藤 課長 係長 "
-    "総合体育館 運動公園 屋内水泳プール ネットウィンチ "
-    "指定管理者 入札 契約検査 業務委託料 修繕料 "
-    # …用語集として別ファイル管理し、ここに展開
-)
+# initial_prompt は業務用語+私的用語の両方を投入
+INITIAL_PROMPT = open("prompts/whisper-initial-prompt.txt").read()
 
 audio = whisperx.load_audio(audio_path)
 result = model.transcribe(audio, initial_prompt=INITIAL_PROMPT)
 
-# 2. アライメント(単語レベルタイムスタンプ)
+# 単語レベルアライメント
 align_model, metadata = whisperx.load_align_model(
     language_code="ja", device=device
 )
 result = whisperx.align(
     result["segments"], align_model, metadata, audio, device=device
 )
-
-# 3. 話者分離(Phase 2 で有効化、HF_TOKEN 要)
-if DIARIZE_ENABLED:
-    diarize_model = whisperx.DiarizationPipeline(
-        use_auth_token=os.environ["HF_TOKEN"], device=device
-    )
-    diarize_segments = diarize_model(audio)
-    result = whisperx.assign_word_speakers(diarize_segments, result)
 ```
 
-**Apple Watch 録音特性に対する想定:**
-- モノラル・帯域狭め・自分と相手の距離が近い → 話者分離が不安定になりやすい
-- Phase 1+3 で1〜2週間運用してから「話者ラベル無しでも要約品質は十分か」を判断
-- 不要と判断したら Phase 2 はスキップ可
+話者分離(diarization)は Phase 5。Watch 録音はモノラル・距離差小で不安定化しやすいので、効果検証してから有効化。
 
-#### 4.3.5 PIIマスキング戦略
+#### 4.3.5 ④ PIIマスキング戦略
 
-**機械的にマスクするパターン:**
+機械的にマスクするパターン:
 
 - 電話番号: `\d{2,4}-\d{2,4}-\d{4}` → `[電話番号]`
-- メール: `[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}` → `[メール]`
+- メール: 標準パターン → `[メール]`
 - 申請番号(7桁): `\b\d{7}\b` → `[申請番号]`
 - 郵便番号: `\d{3}-\d{4}` → `[郵便番号]`
+- クレジットカード様の数字列 → `[番号]`
 
-**spaCy/GiNZA で人名・組織名を検出して伏字化(オプション):**
+spaCy/GiNZA で人名・組織名を検出して伏字化(オプション):
 
-- ただし業務文脈では「課長」「○○課」など固有名詞も意味を持つので、伏字化しすぎると要約品質が落ちる
-- 推奨: 個人名は伏字化、組織・役職は残す
-- 「許可リスト」方式: 浦安市・自身の課・既知の関係先(GoogleDriveから取得可)はマスクしない
-- 自分(遠藤)の発言は伏字化しない(自分→自分なので冗長)
+- 業務文脈では「課長」「○○課」など固有名詞も意味を持つので、伏字化しすぎると要約品質が落ちる
+- 推奨: 個人名のうち「マスク辞書に明示登録されたもの以外」を伏字化、組織・役職は残す
+- **許可リスト方式**: 浦安市・市民スポーツ課・既知関係先・家族はマスクしない
+- 自分(遠藤)の発言は伏字化しない
 
-**マスク辞書:** `pii_dict.yaml` を別管理し、運用しながら拡充
+マスク辞書: `pii_dict.yaml` を Vault 外で管理し運用しながら拡充。
 
-#### 4.3.6 Claude API 構造化プロンプト(雛形)
+#### 4.3.6 ⑤ Claude API 構造化プロンプト
+
+`_プロンプト/claude-structuring.md` 参照(Vault テンプレに同梱)。要点:
+
+- 1つの録音から **複数のコンテキスト**を抽出可能(電話中に話題が転換した場合など)
+- 各コンテキストに対して:
+  - 要約(3-5文)
+  - ToDo(期限・担当付き)
+  - 人物(自動的に `[[人物名]]` リンクに)
+  - トピック(同上)
+  - 場所(同上)
+  - **領域タグ(複数可)**: `業務`, `私的`, `知的興味`, `家族`, `健康`, `趣味`, `投資` など
+  - **重要度スコア**: 1-5
+  - 感情温度: ポジティブ / ニュートラル / ネガティブ / 葛藤
+- **雑談・テスト録音は出力に含めない**(空配列で返す)
+- 不確実な情報は `(要確認)` と付記
+
+#### 4.3.7 ⑥ Obsidian Vault 出力
+
+§5 で詳述。要点:
+
+- 録音1件 → `録音/YYYY-MM-DD/HH-MM-SS.md` 1ノート生成
+- 同日の `日次/YYYY-MM-DD.md` に追記(リンク + 要約スニペット)
+- 抽出された `[[人物]]` `[[トピック]]` `[[場所]]` ノートが存在しなければ skeleton を自動生成
+- `一覧/ToDo.md` `一覧/重要度高.md` を再生成(全 Vault スキャン)
+
+-----
+
+## 5. Obsidian Vault 設計
+
+### 5.1 フォルダ構造
 
 ```
-以下はある業務日の音声を文字起こししたものです。話者ラベルとタイムスタンプ付き。
-これを「会話単位」に分割し、それぞれについて構造化JSONで出力してください。
-
-出力スキーマ:
-{
-  "date": "YYYY-MM-DD",
-  "conversations": [
-    {
-      "start_time": "HH:MM:SS",
-      "end_time": "HH:MM:SS",
-      "topic": "短い見出し",
-      "counterpart": "相手の名前や所属(不明なら null)",
-      "category": "施設管理 / 入札契約 / システム業務 / 内部調整 / その他 のいずれか",
-      "summary": "3-5文の要点",
-      "todos": [
-        {"text": "アクション内容", "due": "期限(あれば、なければ null)", "assignee": "self / 他者名"}
-      ],
-      "key_decisions": ["合意・決定事項のリスト"],
-      "open_questions": ["未解決の論点"]
-    }
-  ]
-}
-
-注意:
-- 会話の境界は話題の転換と相手の変化で判定
-- **業務に関係しない私的な会話・雑談・テスト録音は出力に含めない(conversations を空にしてよい)**
-- 不確実な情報は推測せず "(要確認)" と付記
-- JSONのみ返す、Markdownや前置きは不要
+音声記憶/                         ← Vault ルート
+├── .obsidian/                   ← Obsidian 設定(初回起動で自動生成)
+├── 録音/
+│   └── YYYY-MM-DD/
+│       └── HH-MM-SS.md          ← 1録音 = 1ノート
+├── 日次/
+│   └── YYYY-MM-DD.md            ← その日の全録音への [[]] 集約
+├── 人物/
+│   └── 田中さん.md               ← 自動抽出・累積される人物ノート
+├── トピック/
+│   └── モルック大会.md           ← 案件・テーマの軸ノート
+├── 場所/
+│   └── 総合体育館.md
+├── 一覧/
+│   ├── ToDo.md                  ← 全未完了 ToDo の横串
+│   └── 重要度高.md               ← 重要度 4-5 の録音一覧
+├── _テンプレート/                ← ノート手動作成時の雛形
+│   ├── 録音ノート.md
+│   ├── 日次ノート.md
+│   ├── 人物ノート.md
+│   └── トピックノート.md
+├── _プロンプト/                  ← パイプラインが参照
+│   ├── claude-structuring.md
+│   └── whisper-initial-prompt.txt
+└── _生成ログ/
+    └── YYYY-MM-DD.log           ← パイプライン処理の生ログ
 ```
 
-参考: jessedc/claude-apple-voice-memos-skill の SKILL.md に同種のプロンプトがあるので、運用しながら良い表現を吸収する。
+`_` で始まるフォルダはパイプライン・テンプレ用、それ以外はユーザーが日常的に見るもの。
 
-#### 4.3.7 出力Markdown形式
+### 5.2 録音ノートのテンプレート
 
 ```markdown
-# 業務記録 2026-05-20(水)
+---
+date: 2026-05-23
+time: 13:39:19
+duration: 5m23s
+audio_path: "../../Just Press Record/2026-05-23/13-39-19.m4a"
+counterpart: ["[[田中さん]]"]
+topics: ["[[モルック大会]]", "[[備品調達]]"]
+locations: ["[[総合体育館]]"]
+domains: [業務, 私的]
+importance: 4
+sentiment: ニュートラル
+tags: [録音, 業務, 私的]
+---
 
-## 🔴 要対応・本日中
+# 13:39 田中さんとの電話
 
-### 1. 大子さん 説明欄訂正
-- **相手**: 大子さん(契約検査?)
-- **時刻**: 14:30-14:35
-- 要点: ...
-- ToDo:
-  - [ ] 手書きで「本来業務委託料で...」と訂正、システムは触らない
+## 要約
+3-5文の要点...
 
-(以下、会話ごとに続く)
+## ToDo
+- [ ] 来週までに見積もり確認 #todo
+- [ ] 田中さんに資料送付 #todo
 
-## 📋 本日のToDoまとめ
-- [ ] (各会話から抽出した全ToDoのフラット一覧)
+## キーポイント
+- 合意事項のリスト
+- 未解決の論点
+
+## 全文(タイムスタンプ付き)
+[00:00] こんにちは、田中です...
+[00:12] ...
+
+## 関連
+- [[2026-05-22]] - 前日の打ち合わせ
+- [[モルック大会]]
+- [[田中さん]]
+
+---
+[原音を再生](../../Just%20Press%20Record/2026-05-23/13-39-19.m4a)
 ```
 
-### 4.4 トリガー
+### 5.3 タグ規約
 
-**選択肢A: watchdog常駐(推奨)**
+| タグ | 意味 |
+|---|---|
+| `#業務` | 仕事関連 |
+| `#私的` | プライベート |
+| `#知的興味` | 学習・思考メモ |
+| `#家族` | 家族関連 |
+| `#健康` | 体調・運動・医療 |
+| `#趣味` | モルック・ゲーム等 |
+| `#投資` | 資産・金銭判断 |
+| `#要対応` | 期限付き ToDo を含む |
+| `#重要` | 重要度 4-5 自動付与 |
+| `#要確認` | 文字起こし精度疑い |
 
-```python
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+複数付与可。Claude API のプロンプトで「単一に分類せず、該当するもの全部付与」と指示。
 
-# inboxフォルダ(ローカル同期 or Drive APIポーリング)を監視
-# 新規ファイル検知 → 即処理
-```
+### 5.4 リンク戦略
 
-**選択肢B: Windowsタスクスケジューラ + Python script (15分間隔)**
+- **人物**: `[[人物/田中さん]]` または `[[田中さん]]`(Obsidian は自動解決)
+- **トピック**: 案件・テーマ名で `[[]]`(同義語は人物ノート側で別名管理)
+- **場所**: 施設名・地名で `[[]]`
+- **日付**: `[[2026-05-23]]` で日次ノートにリンク
+- **音声本体**: `../../Just Press Record/2026-05-23/13-39-19.m4a` を相対パスで(Obsidian は Vault 外ファイルも開ける)
 
-PCを常時起動しない場合や、watchdog の負荷が気になる場合はこちら。Apple Watch 録音は短尺〜中尺が多く、15分の遅延でも体感問題なし。
+### 5.5 グラフビュー活用
+
+Obsidian のグラフビューで:
+
+- 業務トピックと私的トピックの交差点が見える
+- 人物ノードのクラスタリングで「誰と何の話をよくしてるか」が浮かぶ
+- 孤立ノード = 1度きりの話題、ハブノード = 継続案件
 
 -----
 
-## 5. フェーズ計画
+## 6. フェーズ計画
 
-|Phase|内容                                             |完了条件                          |想定工数  |
-|-----|-----------------------------------------------|------------------------------|------|
-|**1**|VoxRec 設定 + Drive inbox + 軽フィルタ + WhisperX 文字起こし|Watchで録音したら数分後にDriveに生の文字起こしテキストが出る|半日    |
-|**2**|WhisperX の話者分離フラグを有効化(要効果検証)        |話者ラベルが付いて、Phase 1+3 比で要約品質が明確に向上 |半日   |
-|**3**|Claude APIで構造化Markdown生成                       |`業務記録/YYYY-MM-DD.md` が自動生成される |半日    |
-|**4**|PIIマスキング層追加 + Sheets ToDo同期                    |マスク後にClaude APIへ、ToDoが別シートに溜まる|1日    |
-|**5**|Reminders連携、エラー処理、再実行UI                        |期限付きToDoがApple Remindersに     |余裕がある時|
+| Phase | 内容 | 完了条件 | 想定工数 |
+|---|---|---|---|
+| **1** | Just Press Record 設定 + iCloud for Windows + 軽フィルタ + WhisperX 文字起こし | Watch で録音 → 数分後に ThinkPad のテキストファイル(生文字起こし)生成 | 半日 |
+| **2** | Obsidian Vault 作成 + Claude API 構造化(基本) | 録音ノート1件が Vault に生成、リンクは未自動 | 半日 |
+| **3** | エンティティ抽出 + 自動リンク + 日次ノート集約 | グラフビューに人物・トピックノードが現れる | 1日 |
+| **4** | PII マスキング層追加 + 領域タグ + 重要度スコア | マスク後に Claude API、複数タグ付与 | 1日 |
+| **5** | Watch 話者分離(WhisperX diarization)+ Reminders 連携 + エラー UI | 期限付き ToDo が Apple Reminders に、失敗ファイル再実行可 | 余裕がある時 |
 
-**Phase 1+3 でMVP完成。** ペタペタ貼る運用はここで卒業できる。Phase 2,4 は品質向上、Phase 5 は運用最適化。WhisperX 採用で Phase 2 は「フラグを立てるだけ」のコストになった。
+**Phase 1+2 で MVP。** 「ペタペタ貼る」運用はここで卒業。Phase 3 で Obsidian の真価が出る。
 
 -----
 
-## 6. 設定値・環境変数
+## 7. 設定値・環境変数
 
-`.env` 例:
+`.env`:
 
 ```
-# Google
-GOOGLE_SERVICE_ACCOUNT_JSON=path/to/service-account.json
-DRIVE_INBOX_FOLDER_ID=xxxxxxxxxxxxxxxx
-DRIVE_PROCESSED_FOLDER_ID=xxxxxxxxxxxxxxxx
-DRIVE_SKIPPED_FOLDER_ID=xxxxxxxxxxxxxxxx
-DRIVE_DAILY_OUTPUT_FOLDER_ID=xxxxxxxxxxxxxxxx
-SHEETS_TODO_SHEET_ID=xxxxxxxxxxxxxxxx
-SHEETS_TODO_TAB_NAME=ToDo
+# iCloud Drive パス(ThinkPad での同期先)
+JPR_INBOX_PATH=C:\Users\xxx\iCloud Drive\Just Press Record
+VAULT_PATH=C:\Users\xxx\iCloud Drive\音声記憶
 
-# Hugging Face (WhisperX 話者分離用、Phase 2 で必要)
-HF_TOKEN=hf_xxxxxxxxxxxxxxxx
+# 軽フィルタ
+SKIP_DURATION_THRESHOLD_S=10
+SKIP_SILENCE_RATIO=0.95
+
+# WhisperX
+WHISPER_MODEL=large-v3
+WHISPER_DEVICE=cpu
+WHISPER_COMPUTE_TYPE=int8
+DIARIZE_ENABLED=false
+HF_TOKEN=hf_xxxxxxxxxxxxxxxx           # Phase 5 で必要
 
 # Anthropic
 ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxx
 ANTHROPIC_MODEL=claude-opus-4-7
 
-# パイプライン設定
-WHISPER_MODEL=large-v3
-WHISPER_DEVICE=cpu
-DIARIZE_ENABLED=false
-POLLING_INTERVAL_SECONDS=900
-SKIP_DURATION_THRESHOLD_S=10
-SKIP_SILENCE_RATIO=0.95
+# PII マスキング
+PII_DICT_PATH=./pii_dict.yaml
+PII_ALLOWLIST_PATH=./pii_allowlist.yaml
 ```
 
 -----
 
-## 7. コスト試算(月額)
+## 8. コスト試算(月額)
 
-|項目                  |金額           |備考                      |
-|--------------------|-------------|------------------------|
-|pyannote.ai クラウド版 解約|**-¥3,000**  |WhisperX(ローカル)に移行         |
-|OpenAI Whisper API  |¥0           |使わない(WhisperXローカル)|
-|VoxRec              |¥0           |録音+Driveバックアップは無料機能のみ利用|
-|Anthropic Claude API|+¥500〜1,500  |構造化要約のみ、録音件数次第       |
-|Google Drive/Sheets |¥0           |既存枠内                    |
-|**差し引き**            |**既存より下がる方向**|                        |
+| 項目 | 金額 | 備考 |
+|---|---|---|
+| Just Press Record | ¥0(初回 $4.99 のみ) | サブスクなし |
+| iCloud (50GB以上を想定) | ¥130〜 | 既存契約があれば追加なし |
+| WhisperX (ローカル) | ¥0 | |
+| Anthropic Claude API | ¥500〜2,000 | 構造化要約のみ、件数次第 |
+| Obsidian | ¥0 | 個人利用は無料 |
+| **合計増分** | **約 ¥500〜2,000** | |
 
 -----
 
-## 8. オープン論点(実装中に判断)
+## 9. オープン論点(実装中に判断)
 
-- [ ] 録音ファイル名規則: VoxRec 側で日時付与するか、Drive側のメタデータに任せるか
+- [ ] Watch 録音のサンプリングレート / モノラル品質が Whisper 精度に与える影響を初週で実測
 - [ ] 軽フィルタの閾値(10秒・無音95%)は実データで調整
-- [ ] PIIマスキングで「自分(遠藤)」の発言は伏字化するか → 不要で確定
-- [ ] 雑談・私的内容のフィルタリング基準(Claudeプロンプトで吸収、別ステップは作らない方針で確定)
-- [ ] 既存ボイスメモパイプライン(短尺・GAS経由)との統合タイミング
-- [ ] 1日の業務終了後に Slack/メール通知で「本日のまとめできました」リンクを送るか
+- [ ] PII マスキングで家族名を伏字化するか → 自分は伏字化しない、家族は要検討
+- [ ] Claude プロンプトでの「業務/私的/知的興味」の境界定義
+- [ ] 重要度スコアのキャリブレーション(主観と Claude の評価のズレ確認)
+- [ ] 既存ボイスメモパイプライン(短尺・GAS経由)との関係
+- [ ] 1日の終わりに「本日のまとめ」を Slack/メール通知するか
 - [ ] バックログ(過去の文字起こし)の一括取込みUI
-- [ ] Apple Watch 録音のサンプリングレート / モノラル品質が Whisper 精度に与える影響を初週で実測
-- [ ] VoxRec の Google Drive アップロード失敗時の検知・通知方法(アプリ通知頼みでよいか)
-- [ ] VoxRec の無料機能制限が将来変わった場合の代替アプリ(RecorderHQ / Just Press Record + iCloud Drive)
+- [ ] Vault の Git バージョン管理(プライベートリポジトリ)有無
+- [ ] Obsidian モバイル($8/月)で iPhone でも編集するか、閲覧は Files アプリの Markdown プレビューで足りるか
 
 -----
 
-## 9. リスクと緩和策
+## 10. リスクと緩和策
 
-|リスク                        |緩和策                                            |
-|---------------------------|-----------------------------------------------|
-|ThinkPad が長期間オフ → 録音が溜まる   |inbox に貯まり続けるだけなので、起動時に順次処理されればOK              |
-|**Apple Watch → iPhone 転送遅延 / VoxRec の Drive アップロード遅延**|録音から Drive 到着まで数十秒〜数分の遅延を前提に運用。即時性が必要な案件は iPhone で直接 VoxRec 起動|
-|**VoxRec の無料機能仕様変更 / サービス停止**|録音は標準 m4a なのでアプリ依存度は低い。代替候補(RecorderHQ / Just Press Record + iCloud Drive)を §8 に記録|
-|**VoxRec の自社AI機能を誤ってON**|セットアップ後に必ず Off を確認。設定スクリーンショットを残す|
-|**Apple Watch 録音の音質**|モノラル・帯域狭め。WhisperX large-v3 は耐えるが、`initial_prompt` で業務用語を必ず投入。重要案件は iPhone 録音を選択|
-|PIIマスキング漏れ                 |段階的に正規表現と辞書を拡充、運用ログでチェック                       |
-|Claude API のJSON出力フォーマット崩れ |`response_format` 指定、パース失敗時は再試行 + raw出力をfailedへ|
-|WhisperX の精度不足           |業務固有用語の `initial_prompt` を辞書化(浦安市・市民スポーツ課の用語集) |
-|WhisperX の話者ラベルが安定しない|Apple Watch録音では距離差が小さく難易度高め。Phase 2 は要効果検証、効果不十分なら無効のまま運用 |
-
------
-
-## 10. 着手手順(Claude Code セッション開始時のチェックリスト)
-
-1. プロジェクトフォルダ作成: `~/projects/voice-pipeline/`
-2. Python 仮想環境セットアップ(`uv` or `venv`)
-3. `requirements.txt` 作成
-4. `.env` テンプレ作成、必要なAPIキー取得
-5. Google Cloud Console でサービスアカウント作成、Drive/Sheets共有設定
-6. iPhone に VoxRec をインストール、Google Drive バックアップを設定(§4.1.1)
-7. Apple Watch のコンプリケーションに VoxRec を配置(§4.1.2)
-8. 試し録音1〜2件 → Drive `inbox/` に届くことを確認
-9. Hugging Face トークン取得、pyannote の利用規約に同意(Phase 2用、後回し可)
-10. Phase 1 のスクリプト雛形作成: `pipeline/phase1_transcribe.py`
-11. テスト用音声で end-to-end 動作確認
-12. cron / watchdog 常駐化
+| リスク | 緩和策 |
+|---|---|
+| ThinkPad が長期間オフ → 録音が溜まる | iCloud に貯まり続けるだけ。起動時に順次処理 |
+| **Watch → iPhone 同期遅延 / iCloud アップロード遅延** | 録音から ThinkPad 到着まで数十秒〜数十分の遅延を前提に運用 |
+| **Watch 画面ロックで録音停止** | 「常にオン」モード、または長尺は iPhone で |
+| **Just Press Record の仕様変更 / 開発停止** | 録音は標準 .m4a。代替: VoxRec / RecorderHQ。データ自体は iCloud に残る |
+| **iCloud for Windows の同期不調** | 同期ステータス監視。手動で iCloud アプリの「再同期」 |
+| **PII マスキング漏れ** | 段階的に正規表現と辞書を拡充、運用ログでチェック |
+| **Claude API のJSON フォーマット崩れ** | パース失敗時は再試行 + raw 出力を `_失敗/` へ |
+| **WhisperX の精度不足** | `initial_prompt` を業務用語+私的用語で充実 |
+| **Vault が肥大化してグラフが見づらい** | 古い録音は年次でアーカイブフォルダへ。リンクは保持 |
+| **業務/私的の混在で機微情報が見えやすい** | Vault 全体を BitLocker / FileVault で暗号化。Obsidian モバイル使う場合は端末ロック必須 |
+| **Vault が iCloud で壊れる** | Git で別バックアップ。または週1で別ドライブにコピー |
 
 -----
 
-## 11. 採用アプリの選定理由(VoxRec)
+## 11. 採用アプリの選定理由(Just Press Record)
 
-Apple Watch 録音アプリは複数あるが、本パイプラインの要件は次の通り:
+Apple Watch 単独録音アプリの候補と評価:
 
-1. Apple Watch から単独で録音できる
-2. 録音ファイルが ThinkPad の届く場所(=Google Drive)に到着する
-3. 音声がサードパーティAI(OpenAI等)に渡らない経路で実現できる
-4. 日本語環境で問題なく動く
-5. ランニングコストが低い
+| アプリ | 評価 |
+|---|---|
+| **Just Press Record(採用)** | $4.99 買い切り。**iCloud Drive の通常フォルダに `.m4a` 保存** = Windows でも素直に同期可。Watch 単独録音◎、オンデバイス文字起こし、データ収集なし |
+| 純正ボイスメモ | 無料。iCloud 同期は Apple デバイス間のみで **Windows からは一切アクセス不可**(private container)。Shortcut での自動エクスポートも Recording 型が File に変換できず実質不可 |
+| VoxRec | 無料(AI有料)。Google Drive 直結◎だが、Google アカウントを介する分プライバシー観点で1段不利 |
+| RecorderHQ | Google Drive 対応・Watch 対応。日本語精度の評判が見つけにくい |
+| Whisper Memos | 録音→AI要約まで自動。**音声が OpenAI に送信される** → §2.1 に反するため不採用 |
 
-主な候補と評価:
-
-|アプリ                |評価                                |
-|--------------------|----------------------------------|
-|VoxRec(採用)|**録音+Google Drive バックアップが無料**。Watch単独録音可・日本語自動句読点対応。自社AIは Off で運用可|
-|Just Press Record|$4.99 買切り。Apple純正オンデバイス文字起こし内蔵で PII 的に最安全。**ただし保存先が iCloud Drive 限定** → Google Drive 主軸の本構成と相性悪|
-|RecorderHQ|Google Drive 対応・Watch対応。日本語精度の評判が見つけにくく VoxRec 優先|
-|Awesome Voice Recorder|月額$3.99〜。機能多いが料金体系が VoxRec より重い|
-|Whisper Notes / MacWhisper|オフライン Whisper 内蔵で究極のプライバシー。**ただしファイル取り出しが面倒**でパイプラインへの接続コストが高い|
-|Whisper Memos|録音→AI要約まで自動。**音声が OpenAI に送信される** → §2.1 の原則に反するため不採用|
-
-将来 VoxRec の仕様変更や Google Drive 連携の不具合が発生した場合の差替候補は RecorderHQ → Just Press Record + iCloud Drive(パイプラインを iCloud 軸に書換) の順で検討する。
+将来 Just Press Record の仕様変更が発生した場合は VoxRec → RecorderHQ → 純正(Shortcut 修正) の順で代替検討。
 
 -----
 
-以上。実装はこれをコンテキストとしてClaude Codeへ渡す前提。各Phase完了時にこの仕様書も更新していく。
+## 12. 補足: 純正ボイスメモを採用しなかった経緯
+
+設計初期は VoxRec、その後「純正ボイスメモ + Shortcut で iCloud Drive に書き出す」案を検証したが、以下の理由で断念:
+
+1. iOS Shortcuts の「録音を検索」アクションが返す `Recording` 型は **音声バイナリへの参照ではなくメタデータのみ**
+2. `ファイルを保存` に渡すと 15バイトのスタブが書き出される
+3. `メディアをエンコード` に渡すと「録音をメディアに変換できなかった」エラー
+4. Apple の公式ドキュメントでも、ボイスメモの Files への書き出しは **手動の「共有 → ファイルに保存」のみ** が案内されている
+5. 純正ボイスメモの iCloud 同期は Apple デバイス間のみ(private container 保存)、iCloud for Windows の同期対象外
+
+→ 純正ボイスメモは **手動で書き出す運用なら使えるが、自動パイプラインの起点には不向き** と結論。
+
+-----
+
+以上。実装はこれをコンテキストとして Claude Code へ渡す前提。各 Phase 完了時にこの仕様書も更新していく。
