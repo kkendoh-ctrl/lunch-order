@@ -19,6 +19,7 @@ import config
 from config import (
     Config,
     canonical_date_folder,
+    canonical_time,
     note_path_for,
     skipped_marker_path_for,
     transcript_path_for,
@@ -146,3 +147,52 @@ def test_skipped_marker_path_for_inbox_root_uses_mtime(tmp_path: Path) -> None:
         skipped_marker_path_for(cfg, audio)
         == cfg.transcripts_dir / "2024-11-13" / "noise.skipped"
     )
+
+
+# -------------------- canonical_time --------------------
+
+
+def test_canonical_time_from_stem(tmp_path: Path) -> None:
+    """stem が HH-MM-SS 形式なら時刻として展開。"""
+    audio = _touch(tmp_path / "2026-05-23" / "13-39-19.m4a")
+    assert canonical_time(audio) == "13:39:19"
+
+
+def test_canonical_time_from_mtime(tmp_path: Path) -> None:
+    """非 canonical stem なら mtime を見る。"""
+    mtime = datetime(2024, 11, 13, 9, 30, 0, tzinfo=timezone.utc)
+    audio = _touch(tmp_path / "inbox" / "test_5min.m4a", mtime=mtime)
+    assert canonical_time(audio) == "09:30:00"
+
+
+def test_canonical_time_metadata_overrides_mtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MP4 メタが取れれば mtime より優先。"""
+    mtime = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    audio = _touch(tmp_path / "inbox" / "voice.m4a", mtime=mtime)
+    monkeypatch.setattr(config, "_try_audio_metadata_time", lambda p: "15:30:45")
+    assert canonical_time(audio) == "15:30:45"
+
+
+def test_canonical_time_falls_back_to_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """全部失敗したら "00:00:00"(空文字や stem 残りは絶対返さない)。"""
+    audio = _touch(tmp_path / "inbox" / "weird.m4a")
+    monkeypatch.setattr(config, "_try_audio_metadata_time", lambda p: None)
+    monkeypatch.setattr(config, "_try_mtime_time", lambda p: None)
+    assert canonical_time(audio) == "00:00:00"
+
+
+def test_canonical_time_always_hhmmss_format(tmp_path: Path) -> None:
+    """戻り値は必ず HH:MM:SS パターンに合致。"""
+    import re
+
+    for name in ("13-39-19.m4a", "test_5min.m4a", "録音 138.m4a"):
+        audio = _touch(
+            tmp_path / "x" / name,
+            mtime=datetime(2024, 11, 13, 1, 2, 3, tzinfo=timezone.utc),
+        )
+        out = canonical_time(audio)
+        assert re.fullmatch(r"\d{2}:\d{2}:\d{2}", out), f"{name} → {out}"

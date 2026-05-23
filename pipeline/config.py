@@ -249,6 +249,32 @@ _DATE_FOLDER_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 def _try_audio_metadata_date(audio_path: Path) -> str | None:
     """MP4 ©day atom → "YYYY-MM-DD"。mutagen 無し or 取れなければ None。"""
+    raw = _read_mp4_day(audio_path)
+    if raw is None:
+        return None
+    dt = _parse_mp4_day(raw)
+    return dt.strftime("%Y-%m-%d") if dt else None
+
+
+def _try_audio_metadata_time(audio_path: Path) -> str | None:
+    """MP4 ©day atom → "HH:MM:SS"。日付だけのフォーマットなら None。"""
+    raw = _read_mp4_day(audio_path)
+    if raw is None:
+        return None
+    dt = _parse_mp4_day(raw)
+    if dt is None:
+        return None
+    # 日付だけ (HH:MM:SS = 00:00:00) は意味のある時刻ではないので None 扱い
+    if dt.hour == 0 and dt.minute == 0 and dt.second == 0:
+        # ただし元文字列に T が含まれていれば 00:00:00 を信用する
+        if "T" in raw or " " in raw:
+            return dt.strftime("%H:%M:%S")
+        return None
+    return dt.strftime("%H:%M:%S")
+
+
+def _read_mp4_day(audio_path: Path) -> str | None:
+    """MP4 ©day atom の生文字列を返す。mutagen 無し or 取れなければ None。"""
     try:
         from mutagen.mp4 import MP4
     except ImportError:
@@ -260,20 +286,24 @@ def _try_audio_metadata_date(audio_path: Path) -> str | None:
         raw = f.tags.get("\xa9day") or f.tags.get("\xa9DAY")
         if not raw:
             return None
-        s = str(raw[0]).strip()
-        for fmt in (
-            "%Y-%m-%dT%H:%M:%SZ",
-            "%Y-%m-%dT%H:%M:%S",
-            "%Y-%m-%d %H:%M:%S",
-            "%Y-%m-%dT%H:%M",
-            "%Y-%m-%d",
-        ):
-            try:
-                return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
-            except ValueError:
-                continue
+        return str(raw[0]).strip()
     except Exception:
         return None
+
+
+def _parse_mp4_day(raw: str) -> datetime | None:
+    """ISO8601 風の MP4 ©day 文字列 → datetime。"""
+    for fmt in (
+        "%Y-%m-%dT%H:%M:%SZ",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%d",
+    ):
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
     return None
 
 
@@ -284,6 +314,19 @@ def _try_mtime_date(audio_path: Path) -> str | None:
         ).strftime("%Y-%m-%d")
     except OSError:
         return None
+
+
+def _try_mtime_time(audio_path: Path) -> str | None:
+    """ファイル mtime → "HH:MM:SS" (UTC)。"""
+    try:
+        return datetime.fromtimestamp(
+            audio_path.stat().st_mtime, tz=timezone.utc
+        ).strftime("%H:%M:%S")
+    except OSError:
+        return None
+
+
+_HHMMSS_RE = re.compile(r"\d{2}-\d{2}-\d{2}")
 
 
 def canonical_date_folder(audio_path: Path) -> str:
@@ -302,6 +345,27 @@ def canonical_date_folder(audio_path: Path) -> str:
         _try_audio_metadata_date(audio_path)
         or _try_mtime_date(audio_path)
         or "_undated"
+    )
+
+
+def canonical_time(audio_path: Path) -> str:
+    """audio_path から HH:MM:SS 形式の時刻を決める(常に何か返す)。
+
+    1. stem が `HH-MM-SS` パターンならそれを使う(JPR の canonical layout)
+    2. MP4 メタ (©day の時刻部分) から取れればそれを使う
+    3. ファイル mtime から取る
+    4. 全部失敗したら "00:00:00"
+
+    `test_5min` のような非 canonical stem でも、frontmatter の time フィールドが
+    "" や "test_5min" にならず実用的な値が入る。Claude が時刻を空で返した
+    ケースの最終フォールバックとしても使える。"""
+    stem = audio_path.stem
+    if _HHMMSS_RE.fullmatch(stem):
+        return stem.replace("-", ":")
+    return (
+        _try_audio_metadata_time(audio_path)
+        or _try_mtime_time(audio_path)
+        or "00:00:00"
     )
 
 

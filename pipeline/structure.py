@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import pii
-from config import Config, canonical_date_folder
+from config import Config, canonical_date_folder, canonical_time
 
 
 _TRANSCRIPT_PLACEHOLDER = "{{TRANSCRIPT}}"
@@ -152,20 +152,18 @@ def _format_transcript_for_user(transcript: dict) -> str:
 
 def _enrich_transcript_meta(transcript: dict, audio_path: Path) -> dict:
     """transcript に date/time(audio ファイル名・ディレクトリ名由来)を補う。
-    既に入っていればそれを優先。
+    既存値があってもそれが空文字なら埋め直す(回帰防止)。
 
     date は canonical_date_folder() で決める(parent が非 canonical でも
-    metadata/mtime で日付を推定する)。"""
-    if "date" not in transcript or "time" not in transcript:
-        date = canonical_date_folder(audio_path)
-        # ファイル名: HH-MM-SS → HH:MM:SS
-        stem = audio_path.stem
-        if re.fullmatch(r"\d{2}-\d{2}-\d{2}", stem):
-            time = stem.replace("-", ":")
-        else:
-            time = stem
-        return {**transcript, "date": transcript.get("date", date), "time": transcript.get("time", time)}
-    return transcript
+    metadata/mtime で日付を推定する)。
+    time は canonical_time() で決める(stem の HH-MM-SS / MP4 メタ / mtime /
+    "00:00:00" の順)。"""
+    out = dict(transcript)
+    if not out.get("date"):
+        out["date"] = canonical_date_folder(audio_path)
+    if not out.get("time"):
+        out["time"] = canonical_time(audio_path)
+    return out
 
 
 def _extract_json(text: str) -> dict:

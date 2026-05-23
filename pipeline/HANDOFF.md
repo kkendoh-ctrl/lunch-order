@@ -2339,3 +2339,95 @@ seg 8 (ビザ連発) / seg 9 (ご視聴...) は迷い無く drop されており
 
 リモート側で #3 の push を待つ。push されたら同じ手順で test_5min.m4a を
 再テストし応答 #13 で報告予定。inbox/138_split/ と vault 内容は保持。
+
+## リモート側からの応答 #12 (2026-05-24 / 残課題 #3: time 値改善 + 回帰修正)
+
+✅ 残課題 #3 実装 & push 済。time 空回帰の原因究明込み。
+
+### time 空回帰の原因
+
+**コードバグではなく Claude の出力変化**。データフローを辿ると:
+
+1. `transcribe.py` の transcript dict には date/time が無い
+2. `structure_transcript` 内で `_enrich_transcript_meta` を呼び transcript を
+   local rebind して date/time を補ってから Claude に送る
+3. **しかしこの enrich は LOCAL のみ** — main.py から `note_writer.render_note`
+   に渡される transcript は原本(date/time なし)
+4. note_writer は `structured.get("time") or transcript.get("time", "")` で
+   組み立てる → Claude が `time: ""` を返すと結局 `""` で確定
+
+応答 #10 では Claude が placeholder で `time: "00:00:00"` を返していた。
+応答 #12 ではハルシネーション drop でクリーンになった入力を見て、Claude が
+「分からないから空で返す」という素直な挙動になった、というだけ。
+
+### 何を変えたか
+
+#### 1. `config.canonical_time(audio_path)` 追加
+
+`canonical_date_folder` と同じパターン。常に HH:MM:SS を返す:
+
+1. stem が `HH-MM-SS` パターンならそれを使う(canonical layout)
+2. MP4 メタ (©day の時刻部分) から取れればそれを使う
+3. ファイル mtime から取る
+4. 全部失敗したら `"00:00:00"`
+
+`_try_audio_metadata_time` を新設(`_read_mp4_day` と `_parse_mp4_day` で
+©day パース部分を共通化、`_try_audio_metadata_date` もこれを使うよう refactor)。
+
+#### 2. `structure._enrich_transcript_meta` 改修
+
+- 旧: `if "date" not in transcript or "time" not in transcript:` → 空文字でも
+  キーがあれば素通り
+- 新: `if not out.get("date"):` 個別に値の真偽で判定、空も埋め直す
+- stem ベタ書きを廃止、`canonical_time()` 使用
+
+#### 3. `note_writer` フォールバック追加
+
+- `_normalize_time` を厳格化: `HH:MM:SS` / `HH-MM-SS` 以外は `""` を返す
+  (旧は "test_5min" のような stem 残りもそのまま返していた)
+- `render_note` で `structured > transcript > canonical_X` の 3 段フォールバック
+
+これで Claude が `time=""` を返しても、note_writer 側で必ず有効な
+HH:MM:SS が確定する。
+
+### 混在型 seg の業務情報巻き添え問題
+
+応答 #12 の指摘 ⚠️(seg 2/4)については **今回は対応見送り**。理由:
+
+- 部分 drop (案 1) は位置検出・前後保持で実装重め、副作用も大きい
+- batch では問題顕在化せず、運用上のクリティカル度は中
+- 残課題 #4 (skeleton 名寄せ) に着手するときに、entity 抽出側で
+  「混在 seg の前半部分は信頼度を落として扱う」のような統合的処理に
+  纏めた方が筋
+
+次の懸念が顕在化したら個別対応します。
+
+### テスト
+
+- 新規: `tests/test_canonical_paths.py` に canonical_time 関連 5 件
+  (stem / mtime / metadata 優先 / 00:00:00 フォールバック / 常に HH:MM:SS)
+- 新規: `tests/test_note_writer.py` に 4 件
+  (`_normalize_time` 厳格化の境界 / Claude 空応答時の time フォールバック /
+  date フォールバック)
+- **全 163 件 pass**
+
+### ローカル側でやること
+
+1. `git pull origin claude/voice-memo-recovery-ZT7v1`
+2. test_5min.m4a で再テスト + ノート削除 + プロセス kill (いつものやつ)
+3. 応答 #13 として:
+   - frontmatter の **time が空でないこと** を確認
+     (期待値: ファイル mtime の HH:MM:SS、または canonical layout なら stem)
+   - drop タグ・skeleton 数も併記
+4. 続けて 138_split から 4 本程度サンプル(part_001, 005, 010, 015 など)
+5. 判定:
+   - ✅ time 埋まる + 既存挙動維持 → 残課題 #2 (`--force-all`) へ
+   - ⚠️ time 埋まるが値が想定外 → どの値が出たか報告
+   - ❌ time なお空 → 他経路から漏れてる可能性、HANDOFF に該当 frontmatter 貼る
+
+### 残課題の進行状況
+
+- [x] **#1 ハルシネーション後処理** (応答 #11 実装 / 応答 #12 検証 ✅)
+- [x] **#3 time 値改善** (応答 #12 実装 / 応答 #13 検証待ち) ← 今回
+- [ ] **#2 `--force-all` オプション** ← 次
+- [ ] **#4 skeleton 名寄せ** (混在 seg 部分 drop もここに統合検討)

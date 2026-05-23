@@ -205,3 +205,90 @@ def test_save_note_creates_dirs(tmp_path: Path) -> None:
     note_writer.save_note("# Hello\n", out)
     assert out.exists()
     assert out.read_text(encoding="utf-8") == "# Hello\n"
+
+
+# -------------------- フォールバック (応答 #12 の time 空回帰 対応) --------------------
+
+
+def test_normalize_time_strict_rejects_stem() -> None:
+    """stem 名残り("test_5min" 等)は frontmatter に出さない。"""
+    assert note_writer._normalize_time("test_5min") == ""
+    assert note_writer._normalize_time("録音 138") == ""
+    assert note_writer._normalize_time(None) == ""
+    assert note_writer._normalize_time("") == ""
+
+
+def test_normalize_time_accepts_canonical_formats() -> None:
+    assert note_writer._normalize_time("13:39:19") == "13:39:19"
+    assert note_writer._normalize_time("13-39-19") == "13:39:19"
+
+
+def test_render_falls_back_to_canonical_time_when_claude_returns_empty(
+    tmp_path: Path,
+) -> None:
+    """Claude が time="" を返し transcript にも無い場合、
+    canonical_time (mtime ベース) でフォールバック。"""
+    import os
+    from datetime import datetime, timezone
+
+    cfg = _mk_cfg(tmp_path)
+    # inbox/ 直下に test_5min.m4a を置く(非 canonical layout)
+    audio = tmp_path / "iCloud Drive" / "Just Press Record" / "test_5min.m4a"
+    audio.parent.mkdir(parents=True, exist_ok=True)
+    audio.write_bytes(b"\x00" * 64)
+    mtime = datetime(2024, 11, 13, 9, 30, 0, tzinfo=timezone.utc).timestamp()
+    os.utime(audio, (mtime, mtime))
+
+    transcript = {
+        "audio_path": str(audio),
+        "duration_s": 300.0,
+        "segments": [{"start": 0.0, "end": 5.0, "text": "テスト"}],
+        "text": "テスト",
+    }
+    result = {
+        "structured": {
+            "date": "",  # Claude が空で返した
+            "time": "",  # Claude が空で返した
+            "contexts": [],
+        },
+        "model": "claude-opus-4-7",
+        "structured_at": "2024-11-13T09:30:00Z",
+        "usage": {},
+    }
+    body = note_writer.render_note(transcript, result, audio, cfg)
+    # mtime から time が埋まる(stem 残り "test_5min" は出さない)
+    assert "time: 09:30:00" in body or "time: '09:30:00'" in body
+    # time フィールドに stem 残りが入っていない
+    assert "time: test_5min" not in body
+    assert "time: 'test_5min'" not in body
+
+
+def test_render_falls_back_to_canonical_date_when_claude_returns_empty(
+    tmp_path: Path,
+) -> None:
+    """Claude が date="" を返し transcript にも無い場合、
+    canonical_date_folder でフォールバック。"""
+    import os
+    from datetime import datetime, timezone
+
+    cfg = _mk_cfg(tmp_path)
+    audio = tmp_path / "iCloud Drive" / "Just Press Record" / "test_5min.m4a"
+    audio.parent.mkdir(parents=True, exist_ok=True)
+    audio.write_bytes(b"\x00" * 64)
+    mtime = datetime(2024, 11, 13, tzinfo=timezone.utc).timestamp()
+    os.utime(audio, (mtime, mtime))
+
+    transcript = {
+        "audio_path": str(audio),
+        "duration_s": 300.0,
+        "segments": [],
+        "text": "",
+    }
+    result = {
+        "structured": {"date": "", "time": "", "contexts": []},
+        "model": "claude-opus-4-7",
+        "structured_at": "2024-11-13T00:00:00Z",
+        "usage": {},
+    }
+    body = note_writer.render_note(transcript, result, audio, cfg)
+    assert "date: '2024-11-13'" in body or "date: 2024-11-13" in body

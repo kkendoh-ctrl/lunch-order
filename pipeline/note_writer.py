@@ -13,7 +13,7 @@ from typing import Any
 
 import yaml
 
-from config import Config
+from config import Config, canonical_date_folder, canonical_time
 
 
 _AUDIO_REL_PARTS = 2  # 録音/YYYY-MM-DD/foo.md からの「..」の数
@@ -38,14 +38,19 @@ def _format_seconds(s: float) -> str:
 
 
 def _normalize_time(value: str | None) -> str:
-    """HH:MM:SS / HH-MM-SS / HHMM などを HH:MM:SS に寄せる(失敗時はそのまま)。"""
+    """HH:MM:SS / HH-MM-SS のみ受理、それ以外(stem 名残り等)は "" を返す。
+
+    "test_5min" のような非時刻文字列を frontmatter に出してしまうと
+    aggregator や Reminders の時刻ソートが壊れるので、呼び出し側で
+    フォールバック(canonical_time など)に倒すために空を返す。"""
     if not value:
         return ""
-    if re.fullmatch(r"\d{2}:\d{2}:\d{2}", value):
-        return value
-    if re.fullmatch(r"\d{2}-\d{2}-\d{2}", value):
-        return value.replace("-", ":")
-    return value
+    s = str(value).strip()
+    if re.fullmatch(r"\d{2}:\d{2}:\d{2}", s):
+        return s
+    if re.fullmatch(r"\d{2}-\d{2}-\d{2}", s):
+        return s.replace("-", ":")
+    return ""
 
 
 def _audio_rel_path(audio_path: Path, vault: Path) -> str:
@@ -110,8 +115,20 @@ def render_note(
     structured = result.get("structured", {}) or {}
     contexts: list[dict] = structured.get("contexts") or []
 
-    date = structured.get("date") or transcript.get("date", "")
-    time = _normalize_time(structured.get("time") or transcript.get("time", ""))
+    # date は structured > transcript > canonical_date_folder の順
+    # (structure_transcript で enrich された transcript が来ない経路もあるので
+    #  canonical_date_folder を最終フォールバックに置く)
+    date = (
+        structured.get("date")
+        or transcript.get("date")
+        or canonical_date_folder(audio_path)
+    )
+    # time も同様。`_normalize_time` が HH:MM:SS 形式のみ通すので、stem
+    # 名残り(例: "test_5min")や Claude が空で返した場合は canonical_time
+    # にフォールバック。
+    time = _normalize_time(structured.get("time") or transcript.get("time") or "")
+    if not time:
+        time = canonical_time(audio_path)
     duration_s = float(
         structured.get("duration_s") or transcript.get("duration_s") or 0
     )
