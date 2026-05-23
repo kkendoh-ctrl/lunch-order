@@ -161,11 +161,26 @@ def test_enrich_transcript_meta_preserves_existing() -> None:
 # -------------------- Phase 4: PII マスキング統合 --------------------
 
 
+def _tool_use_block(input_data: dict, name: str = "save_structured_memo"):
+    return types.SimpleNamespace(type="tool_use", name=name, input=input_data)
+
+
+def _text_block(text: str):
+    return types.SimpleNamespace(type="text", text=text)
+
+
 class _StubResponse:
     """anthropic SDK の messages.create が返すレスポンスの最小スタブ。"""
 
-    def __init__(self, text: str) -> None:
-        self.content = [types.SimpleNamespace(type="text", text=text)]
+    def __init__(
+        self, *, content: list | None = None, text: str | None = None
+    ) -> None:
+        if content is not None:
+            self.content = content
+        elif text is not None:
+            self.content = [_text_block(text)]
+        else:
+            self.content = []
         self.stop_reason = "end_turn"
         self.model = "claude-opus-4-7"
         self.usage = types.SimpleNamespace(
@@ -177,17 +192,18 @@ class _StubResponse:
 
 
 class _StubMessages:
-    def __init__(self, captured: dict) -> None:
+    def __init__(self, captured: dict, response_factory) -> None:
         self.captured = captured
+        self._response_factory = response_factory
 
     def create(self, **kwargs) -> _StubResponse:
         self.captured.update(kwargs)
-        return _StubResponse('{"contexts": []}')
+        return self._response_factory()
 
 
 class _StubClient:
-    def __init__(self, api_key: str, captured: dict) -> None:
-        self.messages = _StubMessages(captured)
+    def __init__(self, api_key: str, captured: dict, response_factory) -> None:
+        self.messages = _StubMessages(captured, response_factory)
 
 
 def _mk_cfg(tmp_path: Path, *, pii_enabled: bool, dict_path: Path | None) -> Config:
@@ -219,10 +235,22 @@ def _mk_cfg(tmp_path: Path, *, pii_enabled: bool, dict_path: Path | None) -> Con
     )
 
 
-def _install_anthropic_stub(monkeypatch, captured: dict) -> None:
-    """import anthropic を Stub に差し替える。"""
+def _install_anthropic_stub(
+    monkeypatch, captured: dict, response_factory=None
+) -> None:
+    """import anthropic を Stub に差し替える。
+
+    response_factory は引数なしで _StubResponse を返す callable。
+    省略時は contexts=[] の tool_use ブロックを返す(従来挙動の代替)。"""
+    if response_factory is None:
+        def response_factory():  # noqa: E306
+            return _StubResponse(
+                content=[_tool_use_block({"contexts": []})]
+            )
     stub_module = types.ModuleType("anthropic")
-    stub_module.Anthropic = lambda api_key: _StubClient(api_key, captured)
+    stub_module.Anthropic = lambda api_key: _StubClient(
+        api_key, captured, response_factory
+    )
     monkeypatch.setitem(sys.modules, "anthropic", stub_module)
 
 
@@ -284,3 +312,217 @@ def test_structure_transcript_skips_masking_when_disabled(
     assert "090-1234-5678" in sent_text
     assert "[電話番号]" not in sent_text
     assert result["pii_masked"] == 0
+
+
+# -------------------- tool_use 経路 --------------------
+
+
+def test_structure_transcript_forces_tool_choice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """messages.create に tools と tool_choice 強制が渡ること。"""
+    cfg = _mk_cfg(tmp_path, pii_enabled=False, dict_path=None)
+    captured: dict = {}
+    _install_anthropic_stub(monkeypatch, captured)
+
+    transcript = {
+        "duration_s": 5.0,
+        "segments": [{"start": 0.0, "end": 3.0, "text": "テスト"}],
+        "text": "テスト",
+    }
+    audio = Path("/x/Just Press Record/2026-05-23/13-39-19.m4a")
+    structure.structure_transcript(transcript, audio, cfg)
+
+    # tools パラメータが渡されている
+    tools = captured["tools"]
+    assert len(tools) == 1
+    assert tools[0]["name"] == "save_structured_memo"
+    schema = tools[0]["input_schema"]
+    assert schema["properties"]["contexts"]["type"] == "array"
+    ctx_props = schema["properties"]["contexts"]["items"]["properties"]
+    # note_writer/aggregator が必要とするキーが全部 schema にある
+    for key in (
+        "title",
+        "summary",
+        "importance",
+        "counterpart",
+        "topics",
+        "locations",
+        "domains",
+        "sentiment",
+        "todos",
+        "key_points",
+        "open_questions",
+    ):
+        assert key in ctx_props, f"schema に {key} が無い"
+
+    # tool_choice で specific tool を強制
+    assert captured["tool_choice"] == {
+        "type": "tool",
+        "name": "save_structured_memo",
+    }
+
+
+def test_structure_transcript_parses_tool_use_block(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """tool_use ブロックの input がそのまま structured として返ること。"""
+    cfg = _mk_cfg(tmp_path, pii_enabled=False, dict_path=None)
+    captured: dict = {}
+
+    tool_input = {
+        "date": "2026-05-23",
+        "time": "13:39:19",
+        "duration_s": 12.5,
+        "contexts": [
+            {
+                "title": "モルック大会の打合せ",
+                "summary": "総合体育館で開催。",
+                "importance": 4,
+                "counterpart": ["田中さん"],
+                "topics": ["モルック大会"],
+                "locations": ["総合体育館"],
+                "domains": ["業務", "私的"],
+                "sentiment": "ニュートラル",
+                "todos": [
+                    {"text": "見積もり確認", "due": "2026-05-30", "assignee": "self"}
+                ],
+                "key_points": ["参加費は無料"],
+                "open_questions": ["駐車場の有無"],
+            }
+        ],
+    }
+
+    def factory():
+        return _StubResponse(content=[_tool_use_block(tool_input)])
+
+    _install_anthropic_stub(monkeypatch, captured, factory)
+
+    transcript = {
+        "duration_s": 12.5,
+        "segments": [{"start": 0.0, "end": 12.5, "text": "..."}],
+        "text": "...",
+    }
+    audio = Path("/x/Just Press Record/2026-05-23/13-39-19.m4a")
+    result = structure.structure_transcript(transcript, audio, cfg)
+
+    assert result["structuring_format"] == "tool_use"
+    assert result["structured"] == tool_input
+    # ノート生成側で必要なキーが入っていることを確認
+    assert result["structured"]["contexts"][0]["title"] == "モルック大会の打合せ"
+
+
+def test_structure_transcript_empty_contexts_tool_use(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """雑談判定で contexts=[] が tool_use で返ってきても正しく扱える。"""
+    cfg = _mk_cfg(tmp_path, pii_enabled=False, dict_path=None)
+    captured: dict = {}
+
+    def factory():
+        return _StubResponse(content=[_tool_use_block({"contexts": []})])
+
+    _install_anthropic_stub(monkeypatch, captured, factory)
+
+    transcript = {
+        "duration_s": 5.0,
+        "segments": [{"start": 0.0, "end": 5.0, "text": "あー"}],
+        "text": "あー",
+    }
+    audio = Path("/x/Just Press Record/2026-05-23/13-39-19.m4a")
+    result = structure.structure_transcript(transcript, audio, cfg)
+
+    assert result["structuring_format"] == "tool_use"
+    assert result["structured"] == {"contexts": []}
+
+
+def test_structure_transcript_falls_back_to_text_when_no_tool_use(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """tool_use ブロックが無く JSON text が返ったケース(レア)。
+    旧 _extract_json 経路で拾えるので structuring_format=json。"""
+    cfg = _mk_cfg(tmp_path, pii_enabled=False, dict_path=None)
+    captured: dict = {}
+
+    def factory():
+        return _StubResponse(text='{"contexts": [{"title": "t", "summary": "s", "importance": 3}]}')
+
+    _install_anthropic_stub(monkeypatch, captured, factory)
+
+    transcript = {
+        "duration_s": 5.0,
+        "segments": [{"start": 0.0, "end": 5.0, "text": "テスト"}],
+        "text": "テスト",
+    }
+    audio = Path("/x/Just Press Record/2026-05-23/13-39-19.m4a")
+    result = structure.structure_transcript(transcript, audio, cfg)
+
+    assert result["structuring_format"] == "json"
+    assert result["structured"]["contexts"][0]["title"] == "t"
+
+
+def test_structure_transcript_falls_back_to_markdown_when_no_tool_use(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """tool_use も JSON も無く Markdown が返ったレアケース。
+    既存の markdown_fallback がそのまま機能する。"""
+    cfg = _mk_cfg(tmp_path, pii_enabled=False, dict_path=None)
+    captured: dict = {}
+
+    def factory():
+        return _StubResponse(text="# Markdown レポート\n本文")
+
+    _install_anthropic_stub(monkeypatch, captured, factory)
+
+    transcript = {
+        "duration_s": 5.0,
+        "segments": [{"start": 0.0, "end": 5.0, "text": "テスト"}],
+        "text": "テスト",
+    }
+    audio = Path("/x/Just Press Record/2026-05-23/13-39-19.m4a")
+    result = structure.structure_transcript(transcript, audio, cfg)
+
+    assert result["structuring_format"] == "markdown_fallback"
+    assert "Markdown レポート" in result["structured"]["contexts"][0]["summary"]
+
+
+def test_structure_transcript_raises_when_response_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """tool_use も text も無いレスポンスは RuntimeError で落とす(運用安全)。"""
+    cfg = _mk_cfg(tmp_path, pii_enabled=False, dict_path=None)
+    captured: dict = {}
+
+    def factory():
+        return _StubResponse(content=[])
+
+    _install_anthropic_stub(monkeypatch, captured, factory)
+
+    transcript = {
+        "duration_s": 5.0,
+        "segments": [{"start": 0.0, "end": 5.0, "text": "テスト"}],
+        "text": "テスト",
+    }
+    audio = Path("/x/Just Press Record/2026-05-23/13-39-19.m4a")
+    with pytest.raises(RuntimeError):
+        structure.structure_transcript(transcript, audio, cfg)
+
+
+# -------------------- tool schema 自体 --------------------
+
+
+def test_structured_tool_schema_well_formed() -> None:
+    schema = structure._structured_tool_schema()
+    assert schema["name"] == "save_structured_memo"
+    assert "input_schema" in schema
+    root = schema["input_schema"]
+    assert root["type"] == "object"
+    assert root["required"] == ["contexts"]
+    # contexts items の必須キー
+    ctx = root["properties"]["contexts"]["items"]
+    assert set(ctx["required"]) == {"title", "summary", "importance"}
+    # importance は 1..5 の整数
+    imp = ctx["properties"]["importance"]
+    assert imp["type"] == "integer"
+    assert imp["minimum"] == 1
+    assert imp["maximum"] == 5

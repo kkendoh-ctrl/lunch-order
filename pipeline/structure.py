@@ -18,8 +18,96 @@ from config import Config, canonical_date_folder
 _TRANSCRIPT_PLACEHOLDER = "{{TRANSCRIPT}}"
 _SYSTEM_PROMPT_FALLBACK = (
     "あなたは音声記憶アシスタントです。録音の文字起こしを受け取り、"
-    "構造化された JSON を返してください。JSON のみ返してください。"
+    "save_structured_memo ツールを呼んで構造化結果を返してください。"
 )
+
+_STRUCTURED_TOOL_NAME = "save_structured_memo"
+
+
+def _structured_tool_schema() -> dict:
+    """Claude に必ず構造化 JSON を返させるための tool 定義。
+
+    note_writer / aggregator が期待する shape をそのまま JSON Schema 化。
+    `contexts` は 1 録音中の話題転換を表す配列(空配列 = 雑談判定)。
+    `tool_choice` で強制呼び出しすれば、Claude が「品質低いから Markdown で
+    返す」とサボれなくなる。"""
+    string_array = {"type": "array", "items": {"type": "string"}}
+    todo_schema = {
+        "type": "object",
+        "properties": {
+            "text": {"type": "string"},
+            "due": {
+                "type": "string",
+                "description": "YYYY-MM-DD or 空文字。期限未指定なら省略可。",
+            },
+            "assignee": {
+                "type": "string",
+                "description": '"self" (自分=遠藤) または他者名。',
+            },
+        },
+        "required": ["text"],
+    }
+    context_schema = {
+        "type": "object",
+        "properties": {
+            "start_time": {"type": "string", "description": "HH:MM:SS"},
+            "end_time": {"type": "string", "description": "HH:MM:SS"},
+            "title": {
+                "type": "string",
+                "description": "1 行で意味が分かるタイトル",
+            },
+            "counterpart": {
+                **string_array,
+                "description": "登場した人物名(表記を統一)",
+            },
+            "topics": {**string_array, "description": "話題のキーワード"},
+            "locations": {**string_array, "description": "言及された場所"},
+            "domains": {
+                **string_array,
+                "description": "業務 / 私的 / 知的興味 / 家族 / 健康 / 趣味 / 投資 など複数可",
+            },
+            "importance": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5,
+                "description": "1=雑談 2=日常 3=普通の業務 4=要対応 5=緊急",
+            },
+            "sentiment": {
+                "type": "string",
+                "description": "ポジティブ / ネガティブ / ニュートラル / 緊迫 など",
+            },
+            "summary": {"type": "string", "description": "3〜5 文の要約"},
+            "todos": {"type": "array", "items": todo_schema},
+            "key_points": {**string_array, "description": "合意事項・結論"},
+            "open_questions": {**string_array, "description": "要確認の論点"},
+            "quality_warning": {
+                "type": "string",
+                "description": "文字起こし品質に問題があれば記載(任意)",
+            },
+        },
+        "required": ["title", "summary", "importance"],
+    }
+    return {
+        "name": _STRUCTURED_TOOL_NAME,
+        "description": (
+            "音声記憶の構造化結果を保存する。1 録音を文脈ごとに分割した contexts 配列で返す。"
+            "雑談・テスト録音・無意味な独り言は contexts=[] で返す(録音ファイル自体はノートとして残る)。"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "date": {"type": "string", "description": "YYYY-MM-DD(入力の録音日時を書き写す)"},
+                "time": {"type": "string", "description": "HH:MM:SS(同上)"},
+                "duration_s": {"type": "number"},
+                "contexts": {
+                    "type": "array",
+                    "items": context_schema,
+                    "description": "話題ごとに分割した構造化結果。雑談判定なら空配列。",
+                },
+            },
+            "required": ["contexts"],
+        },
+    }
 
 
 def _split_prompt(template: str) -> str:
@@ -177,6 +265,11 @@ def structure_transcript(
     user_content = _format_transcript_for_user(masked_transcript)
 
     client = anthropic.Anthropic(api_key=cfg.anthropic_api_key)
+    # tool_use 強制で Claude に JSON Schema 準拠の構造化結果を返させる。
+    # 「品質低いから Markdown で返す」とサボれなくなり、frontmatter が
+    # 確実に埋まる。tool が呼ばれなかったケース(レアだが安全のため)は
+    # 旧来の text 解析 → markdown_fallback 経路に落とす。
+    tool_def = _structured_tool_schema()
     response = client.messages.create(
         model=cfg.anthropic_model,
         max_tokens=cfg.anthropic_max_tokens,
@@ -190,23 +283,37 @@ def structure_transcript(
             }
         ],
         messages=[{"role": "user", "content": user_content}],
+        tools=[tool_def],
+        tool_choice={"type": "tool", "name": _STRUCTURED_TOOL_NAME},
     )
 
-    text_parts = [b.text for b in response.content if b.type == "text"]
-    if not text_parts:
-        raise RuntimeError(
-            f"Claude が text ブロックを返さなかった: stop_reason={response.stop_reason}"
-        )
-    raw = "\n".join(text_parts)
-    try:
-        structured = _extract_json(raw)
-        structuring_format = "json"
-    except ValueError:
-        # JSON 抽出失敗。Markdown レスポンスを 1 つの context にまとめて続行。
-        # 例外を投げて Phase 2 全体を落とすより、低品質結果でも note を作って
-        # 人間にレビューさせる方が運用上ロスが少ない。
-        structured = _markdown_to_fallback_structured(raw)
-        structuring_format = "markdown_fallback"
+    structured: dict | None = None
+    structuring_format = "tool_use"
+    for block in response.content:
+        if getattr(block, "type", None) == "tool_use" and block.name == _STRUCTURED_TOOL_NAME:
+            structured = dict(block.input or {})
+            break
+
+    if structured is None:
+        # tool_choice 強制下では基本通らないが、Anthropic 側のエッジケース
+        # (refusal / extended_thinking のみで stop など)に備えて旧経路を残す。
+        text_parts = [
+            b.text for b in response.content if getattr(b, "type", None) == "text"
+        ]
+        raw = "\n".join(text_parts) if text_parts else ""
+        if raw.strip():
+            try:
+                structured = _extract_json(raw)
+                structuring_format = "json"
+            except ValueError:
+                structured = _markdown_to_fallback_structured(raw)
+                structuring_format = "markdown_fallback"
+        else:
+            # 何も返ってこなかった: スタックトレース付きで落とす方が運用上安全
+            raise RuntimeError(
+                f"Claude が tool_use も text も返さなかった: "
+                f"stop_reason={response.stop_reason}"
+            )
 
     return {
         "structured": structured,

@@ -1241,3 +1241,97 @@ response = client.messages.create(
 3. 応答 #8 で frontmatter 含めた完全な JSON ノートが生成できたか報告
 
 frontmatter が埋まれば 4 本 batch テストに進む。
+
+## リモート側からの応答 #7 (2026-05-24 / tool_use 強制 で JSON 必達化)
+
+✅ お願い 1 件目(tool_use で JSON Schema 強制)を実装 & push 済。
+お願い 2 件目(seg 1/9 ブラックリスト) と 3 件目(--force-all) は
+今回は見送り — まず tool_use の効果を見てから判断したい。
+
+### 何を変えたか
+
+`structure.py::structure_transcript` を Anthropic `tools` + `tool_choice`
+強制呼び出し経路に切り替え。
+
+1. **`_structured_tool_schema()` を追加** — note_writer / aggregator が
+   期待する完全な shape を JSON Schema 化:
+   - `date`, `time`, `duration_s` (任意)
+   - `contexts: []` (required) - 雑談判定で空配列 OK
+   - 各 context: `title` / `summary` / `importance` を required、その他
+     `counterpart` / `topics` / `locations` / `domains` / `sentiment` /
+     `todos[{text, due, assignee}]` / `key_points` / `open_questions` /
+     `quality_warning` を任意
+2. **`tool_choice={"type": "tool", "name": "save_structured_memo"}`** で
+   ツール呼び出しを強制 → Claude が「品質低いから Markdown」と逃げられない
+3. **response.content から tool_use ブロックを抽出** — `.input` がそのまま
+   parsed JSON なので、`json.loads` 不要
+4. **既存の text / markdown_fallback 経路は防御として残す** — Anthropic
+   側のエッジケース(refusal, thinking のみで stop など)に備える
+5. `structuring_format` に `"tool_use"` / `"json"` / `"markdown_fallback"`
+   の 3 値、ステータスログに反映
+
+system プロンプト (`claude-structuring.md`) は触っていない — schema
+description が一次ガイド、template が業務ドメイン補足という二段構え。
+
+### 期待される効果
+
+| 項目 | 旧挙動 | 新挙動 |
+|---|---|---|
+| `structured(.../tool_use)` | ❌ Markdown 返してきて fallback | ✅ JSON Schema 強制で必達 |
+| `frontmatter.date/time` | 空 (`''`) | 埋まる(tool schema に明示) |
+| `counterpart/topics/locations` | 空配列 | Claude が抽出した値 |
+| ノート内容 | v3 で実用議事録レベル | 同等以上(構造化キー化で集約も効く) |
+| Phase 3 集約 | 機能せず (空配列で wiki link なし) | 機能する → 人物/トピック skeleton 生成 |
+
+### テスト
+
+- `tests/test_structure.py` に tool_use 関連 7 件追加 / 既存 stub を
+  tool_use ブロック対応に再構築
+  - tool_choice 強制が渡されることの確認
+  - tool_use input がそのまま parse されることの確認
+  - 空 contexts (雑談判定) の扱い
+  - tool_use 無いとき text → JSON fallback
+  - tool_use 無いとき Markdown → markdown_fallback
+  - 何も返らないとき RuntimeError
+  - schema 自体の整合性 (required キー / importance 範囲)
+- 既存 PII テストも tool_use 経路でグリーン
+- **全 135 件 pass**
+
+### ローカル側でやること
+
+1. `git pull origin claude/voice-memo-recovery-ZT7v1`
+2. 既存ノート削除 + --force:
+   ```powershell
+   Remove-Item "G:\マイドライブ\01.アイデア\音声メモログ\vault\録音\2026-05-23\test_5min.md"
+   Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force
+   python main.py test "G:\マイドライブ\01.アイデア\音声メモログ\inbox\test_5min.m4a" --force 2>&1 | Tee-Object out_5min_v4.log
+   ```
+3. 応答 #8 として HANDOFF.md に貼る:
+   - ログ全文 (特に `structured(ctx=N/tool_use, ...)` の **`/tool_use` タグ確認**)
+   - ノートのフロントマター全文 — date/time/counterpart/topics/locations
+     が **空でなく埋まっている** ことを確認
+   - ノート本文 — context の `title`, `summary`, `key_points`, `todos` が
+     v3 と同等以上のクオリティか
+   - Phase 3 集約結果 — `vault/人物/`, `vault/トピック/`, `vault/場所/`
+     配下に skeleton ノートができているか
+
+### 想定される結果 / 次アクション分岐
+
+| 観測 | 次アクション |
+|---|---|
+| ✅ `/tool_use` 出 + frontmatter 全埋め + skeleton 生成 | inbox/138_split/ から part_005/010/015/020 を順次 test → 結果も同セクション追記 |
+| ⚠️ `/tool_use` 出るが frontmatter 一部空 | schema 側の required を緩めすぎたかも。報告 → 必要に応じて調整 |
+| ❌ `/tool_use` 出ず /markdown_fallback 残留 | Anthropic SDK バージョンが古い可能性 (tools 引数受け付けない) → `pip show anthropic` 結果報告 |
+| ❌ stop_reason=tool_use なのに block 取れない | 仕様変更の可能性 → response.content 全 block の `type` を報告 |
+
+### 残課題メモ(次回対応候補)
+
+- **seg 1/9 ハルシネーション**: ブラックリスト後処理(`「ご視聴ありがとうございました」`
+  完全一致 segment を drop)を `transcribe.py` の後段に追加
+- **`--force-all`**: ノートも上書き対象にするオプション。`--force` の挙動は
+  現状維持(ユーザー誤操作からの保護)、`--force-all` を新規追加で対応
+- **`_enrich_transcript_meta` の time 空問題**: stem が `HH-MM-SS` じゃない
+  ファイル(`test_5min` 等)の time をどうするか。mtime から `HH:MM:SS`
+  を生やすのが筋
+
+ただし全部 tool_use の効果確認後に着手。先に応答 #8 待つ。
