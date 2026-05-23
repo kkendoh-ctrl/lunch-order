@@ -486,7 +486,7 @@ PII_ALLOWLIST_PATH=./pii_allowlist.yaml
 - [ ] 重要度スコアのキャリブレーション(主観と Claude の評価のズレ確認)
 - [ ] 既存ボイスメモパイプライン(短尺・GAS経由)との関係
 - [ ] 1日の終わりに「本日のまとめ」を Slack/メール通知するか
-- [ ] バックログ(過去の文字起こし)の一括取込みUI
+- [x] バックログ(過去の文字起こし)の一括取込みUI(`python main.py import <dir>` 実装済)
 - [ ] Vault の Git バージョン管理(プライベートリポジトリ)有無
 - [ ] Obsidian モバイル($8/月)で iPhone でも編集するか、閲覧は Files アプリの Markdown プレビューで足りるか
 

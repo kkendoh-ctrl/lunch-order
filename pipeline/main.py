@@ -17,6 +17,7 @@ import click
 import aggregator
 import failure_tracker
 import filter as audio_filter
+import importer
 import note_writer
 import structure
 import transcribe as tx
@@ -319,6 +320,52 @@ _TEMPLATES_TO_COPY = [
     ("whisper-initial-prompt.txt", "_プロンプト/whisper-initial-prompt.txt"),
     ("録音ノート.md", "_テンプレート/録音ノート.md"),
 ]
+
+
+@cli.command("import")
+@click.argument(
+    "source_dir",
+    type=click.Path(exists=True, path_type=Path, file_okay=False),
+)
+def import_cmd(source_dir: Path) -> None:
+    """任意フォルダの音声を inbox の YYYY-MM-DD/HH-MM-SS.m4a 形式にコピー。
+
+    iOS 純正ボイスメモ等から書き出した過去録音を一括取込みする用。
+    元ファイルは触らない。日時推定は (1) 音声メタの ©day → (2) mtime の
+    順。両方失敗したら <inbox>/_undated/ に元のファイル名で隔離。
+    取込み後は `python main.py batch` で全件処理。"""
+    cfg = Config.load()
+    if not cfg.jpr_inbox.exists():
+        cfg.jpr_inbox.mkdir(parents=True)
+    click.echo(f"取込み元: {source_dir}")
+    click.echo(f"取込み先: {cfg.jpr_inbox}")
+    click.echo("")
+    results = importer.import_directory(source_dir, cfg)
+    if not results:
+        click.echo("対象ファイル無し(.m4a/.mp3/.wav/.mp4)")
+        return
+
+    by_source: dict[str, int] = {}
+    for r in results:
+        by_source[r.date_source] = by_source.get(r.date_source, 0) + 1
+        if r.date_source == "error":
+            click.echo(f"  [error] {r.src.name}: {r.error}")
+
+    click.echo(f"\n{len(results)} 件処理:")
+    for k in ("metadata", "mtime", "undated", "error"):
+        v = by_source.get(k, 0)
+        if v:
+            click.echo(f"  {k}: {v} 件")
+    if by_source.get("undated"):
+        click.echo(
+            f"\n  [warn] _undated/ のファイルは batch で処理されるが、"
+            f"日付フォルダが '_undated' になる。"
+        )
+        click.echo(
+            f"  正しい日付が分かるならば mv で <inbox>/YYYY-MM-DD/ に動かしてから batch。"
+        )
+    click.echo("")
+    click.echo("次は: python main.py batch")
 
 
 @cli.command()

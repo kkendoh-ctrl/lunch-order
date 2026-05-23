@@ -6,3 +6,6 @@ watchdog>=4.0.0
 click>=8.1.0
 anthropic>=0.92.0
 pyyaml>=6.0
+# import コマンドで Voice Memos の m4a メタデータから録音日時を取り出す用
+# (無くても mtime fallback で動くので必須ではない)
+mutagen>=1.47.0
