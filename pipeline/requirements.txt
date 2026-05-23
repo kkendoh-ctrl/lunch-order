@@ -1,0 +1,6 @@
+# PyTorch は README.md 参照(先に CPU 版を別 index で入れる)
+whisperx>=3.1.5
+pydub>=0.25.1
+python-dotenv>=1.0.0
+watchdog>=4.0.0
+click>=8.1.0
