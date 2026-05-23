@@ -2038,3 +2038,90 @@ batch 合計 +9+7+13 = +29, 合計 37 件 → 実 37 件) → 名寄せ未対応
   分割して順次処理
 
 を決めてもらえば作業継続します。inbox/138_split/ と vault 内容は保持。
+
+## リモート側からの応答 #11 (2026-05-24 / 残課題 #1: ハルシネーション後処理)
+
+✅ 残課題優先順位、推奨どおり **1 → 3 → 2 → 4** で確定。
+まず #1 (ハルシネーション後処理) を実装 & push 済。
+
+### 何を変えたか
+
+新規 `pipeline/hallucination.py` に検知ロジックを分離(テスタビリティ重視)。
+`transcribe.py::transcribe` で WhisperX 結果を取得後、保存前に通す。
+
+#### 4 種類の検知ルール (優先度順)
+
+| ルール | 例 | しきい値(.env) |
+|---|---|---|
+| 1. ブラックリスト定型句 | "ご視聴ありがとうございました" 単独 / 連発 | (固定リスト + 外部ファイル追加可) |
+| 2. 同一トークン連発 | "うん うん うん うん うん" | `HALLUCINATION_DROP_TOKEN_STREAK=5` |
+| 3. 短 N-gram (2-5 語) 連発 | "あ い う あ い う あ い う" | `HALLUCINATION_DROP_NGRAM_STREAK=4` |
+| 4. 空白なし部分文字列連発 | "のうちのうちのうちのうち" | `HALLUCINATION_DROP_SUBSTR_STREAK=6` |
+
+検知されたセグメントは:
+- `text` を `[ハルシネーション drop: <reason>]` に置換
+- `original_text` に元のテキストを保持(transcript JSON で参照可)
+- `dropped_reason` フィールドを追加
+
+タイムスタンプ・speaker など他フィールドは保持。drop しても segment 配列の
+長さは変わらない(下流の集約順序保証)。
+
+#### ブラックリストの拡張
+
+デフォルトに加えて、`HALLUCINATION_DROP_BLACKLIST_PATH` で外部ファイル
+(1 行 1 句、`#` コメント可)を指定すると業務固有の定型句を Vault 外で
+追加できる。社名連呼などを git に上げずに済む。
+
+### 表示
+
+ハルシネーション drop があったセグメントが 1 件以上あると、main.py の
+ステータスログに `drop=N` タグが付く:
+
+```
+結果: transcribed(300.0s, 11 segs, drop=3) / structured(ctx=1, ...) / aggregated(skeleton=8, daily=OK)
+```
+
+drop=0 のときはタグなし(従来通り)。
+
+### テスト
+
+- 新規 `tests/test_hallucination.py` (19 件):
+  - 4 ルールそれぞれの検知 / 通過
+  - threshold カスタム
+  - filter_segments の text 置換 / タイムスタンプ保持 / speaker 保持 / 全部正常時のパススルー
+  - 外部ブラックリスト読み込み(コメント / 空行 / 重複除去)
+- 既存テスト変更不要(Config に default 付きフィールドのみ追加)
+- **全 154 件 pass**
+
+### ローカル側でやること
+
+1. `git pull origin claude/voice-memo-recovery-ZT7v1`
+2. test_5min.m4a で再テスト(`--force` でノート上書き):
+   ```powershell
+   Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force
+   Remove-Item "G:\マイドライブ\01.アイデア\音声メモログ\vault\録音\2026-05-23\test_5min.md" -ErrorAction SilentlyContinue
+   python main.py test "G:\マイドライブ\01.アイデア\音声メモログ\inbox\test_5min.m4a" --force 2>&1 | Tee-Object out_5min_v7.log
+   ```
+3. 応答 #12 として HANDOFF.md に貼る:
+   - ログの `drop=N` タグの値
+   - **seg 1, 3, 6, 7, 8, 9, 10 のうち、応答 #7 で破綻していたものが
+     `[ハルシネーション drop: ...]` に置換されているか**(transcript JSON で確認)
+   - ノートの「全文」セクションで drop マーカーがどう見えるか
+   - Phase 2 構造化が drop マーカーを正しく無視できているか(ノート品質確認)
+4. 続けて 138_split から 4 本程度サンプル test(part_001, 005, 010, 015 等)
+   して drop の傾向を見る
+5. 判定:
+   - ✅ 主要ハルシネーションが drop され、ノート可読性向上 → 残課題 #3 へ
+   - ⚠️ 一部 drop 漏れ → 漏れたセグメント貼って escalate(しきい値調整 or
+     ブラックリスト追加)
+   - ❌ 過剰 drop で業務発話が消える → 該当例貼って escalate
+
+### 残課題の進行状況
+
+- [x] **#1 ハルシネーション後処理** ← 今回
+- [ ] **#3 time 値改善** (mtime → MP4 メタ抽出) ← 次
+- [ ] **#2 `--force-all` オプション**
+- [ ] **#4 skeleton 名寄せ**
+
+138 全パート処理は #3 まで終わってからの方が time が正確で集約品質も上がる。
+急がないので、まず test_5min + 4 本サンプルで効果確認 → 応答 #12 で報告ください。

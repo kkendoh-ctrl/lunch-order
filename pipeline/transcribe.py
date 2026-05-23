@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import hallucination
 from config import Config
 
 
@@ -142,6 +143,24 @@ def transcribe(audio_path: Path, cfg: Config) -> dict:
         }
         for s in result.get("segments", [])
     ]
+
+    # ハルシネーション後処理。faster-whisper の抑止スタックを通り抜けた
+    # 「ご視聴...」「うん うん うん...」「そのうちのうちのうち...」等を
+    # drop マークに置換し、original_text を保持。下流の Claude 構造化は
+    # マーカーを「無視すべき区間」と認識できる。
+    hallucination_drops = 0
+    if cfg.hallucination_drop_enabled:
+        blacklist = hallucination.load_blacklist(
+            cfg.hallucination_drop_blacklist_path
+        )
+        segments, hallucination_drops = hallucination.filter_segments(
+            segments,
+            blacklist=blacklist,
+            token_streak_threshold=cfg.hallucination_drop_token_streak,
+            ngram_streak_threshold=cfg.hallucination_drop_ngram_streak,
+            substr_streak_threshold=cfg.hallucination_drop_substr_streak,
+        )
+
     full_text = " ".join(s["text"] for s in segments if s["text"])
     duration = segments[-1]["end"] if segments else 0.0
 
@@ -152,6 +171,7 @@ def transcribe(audio_path: Path, cfg: Config) -> dict:
         "language": cfg.whisper_language,
         "align_enabled": cfg.whisper_align_enabled,
         "diarize_enabled": cfg.diarize_enabled,
+        "hallucination_drops": hallucination_drops,
         "transcribed_at": datetime.now(timezone.utc).isoformat(),
         "segments": segments,
         "text": full_text,

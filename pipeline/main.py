@@ -141,7 +141,11 @@ def _process_one_inner(audio_path: Path, cfg: Config, force: bool = False) -> st
         result = tx.transcribe(audio_path, cfg)
         out = transcript_path_for(cfg, audio_path)
         tx.save_transcript(result, out)
-        transcribe_status = f"transcribed({fr.duration_s:.1f}s, {len(result['segments'])} segs)"
+        drops = result.get("hallucination_drops", 0)
+        drop_tag = f", drop={drops}" if drops else ""
+        transcribe_status = (
+            f"transcribed({fr.duration_s:.1f}s, {len(result['segments'])} segs{drop_tag})"
+        )
     except Exception as e:
         traceback.print_exc()
         return f"transcribe_error: {e}"

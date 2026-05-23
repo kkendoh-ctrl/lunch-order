@@ -114,6 +114,15 @@ class Config:
     # near-silent 区間からのハルシネーション抑止に効く。
     whisper_hallucination_silence_threshold: float = 0.0
 
+    # 文字起こし後のハルシネーション後処理。faster-whisper の抑止スタックを
+    # 通り抜けた「ご視聴ありがとうございました」や「うん うん うん..."」を
+    # セグメント単位で drop マークに置換する。
+    hallucination_drop_enabled: bool = True
+    hallucination_drop_blacklist_path: Path | None = None
+    hallucination_drop_token_streak: int = 5  # 同一トークン連続のしきい
+    hallucination_drop_ngram_streak: int = 4  # N-gram 連続のしきい
+    hallucination_drop_substr_streak: int = 6  # 空白なし部分文字列連続のしきい
+
     # Phase 4: PII マスキング。既存のテスト fixture を壊さないようデフォルト付き。
     pii_mask_enabled: bool = True
     pii_dict_path: Path | None = None
@@ -183,6 +192,23 @@ class Config:
             ),
             whisper_hallucination_silence_threshold=_get_float(
                 "WHISPER_HALLUCINATION_SILENCE_THRESHOLD", 0.0
+            ),
+            hallucination_drop_enabled=_get_bool(
+                "HALLUCINATION_DROP_ENABLED", True
+            ),
+            hallucination_drop_blacklist_path=(
+                Path(_get("HALLUCINATION_DROP_BLACKLIST_PATH"))
+                if _get("HALLUCINATION_DROP_BLACKLIST_PATH")
+                else None
+            ),
+            hallucination_drop_token_streak=_get_int(
+                "HALLUCINATION_DROP_TOKEN_STREAK", 5
+            ),
+            hallucination_drop_ngram_streak=_get_int(
+                "HALLUCINATION_DROP_NGRAM_STREAK", 4
+            ),
+            hallucination_drop_substr_streak=_get_int(
+                "HALLUCINATION_DROP_SUBSTR_STREAK", 6
             ),
             file_stable_wait_s=_get_float("FILE_STABLE_WAIT_S", 5),
             file_stable_poll_s=_get_float("FILE_STABLE_POLL_S", 2),
