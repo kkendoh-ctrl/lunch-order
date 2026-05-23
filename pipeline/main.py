@@ -7,6 +7,7 @@ ANTHROPIC_API_KEY 未設定なら Phase 2/3 はスキップし Phase 1 だけで
 from __future__ import annotations
 
 import json
+import shutil
 import time
 import traceback
 from pathlib import Path
@@ -295,6 +296,72 @@ def retry(audio_path: Path | None) -> None:
         # なら Phase 2 から自動で続きを処理する既存ロジックに任せる。
         status = _process_one(p, cfg)
         click.echo(f"  → {status}")
+
+
+_TEMPLATE_DIR = Path(__file__).parent / "templates"
+
+_VAULT_DIRS = [
+    "録音",
+    "日次",
+    "人物",
+    "トピック",
+    "場所",
+    "一覧",
+    "_プロンプト",
+    "_テンプレート",
+    "_transcripts",
+    "_failed",
+    "_reminders",
+]
+
+_TEMPLATES_TO_COPY = [
+    ("claude-structuring.md", "_プロンプト/claude-structuring.md"),
+    ("whisper-initial-prompt.txt", "_プロンプト/whisper-initial-prompt.txt"),
+    ("録音ノート.md", "_テンプレート/録音ノート.md"),
+]
+
+
+@cli.command()
+@click.option("--force", is_flag=True, help="既存ファイルを上書き")
+def init(force: bool) -> None:
+    """Vault のフォルダ構造とプロンプトテンプレートを bootstrap する。
+
+    既存ファイルは触らない(--force で上書き)。
+    新規セットアップ時に1回だけ実行する想定。"""
+    cfg = Config.load()
+    if not cfg.vault.exists():
+        cfg.vault.mkdir(parents=True)
+        click.echo(f"Vault 作成: {cfg.vault}")
+
+    for d in _VAULT_DIRS:
+        target = cfg.vault / d
+        if target.exists():
+            click.echo(f"  既存: {d}/")
+        else:
+            target.mkdir(parents=True)
+            click.echo(f"  作成: {d}/")
+
+    click.echo("")
+    click.echo(f"プロンプトテンプレートをコピー (from {_TEMPLATE_DIR})")
+    for src_name, dest_rel in _TEMPLATES_TO_COPY:
+        src = _TEMPLATE_DIR / src_name
+        dest = cfg.vault / dest_rel
+        if not src.exists():
+            click.echo(f"  [warn] テンプレ無し: {src}")
+            continue
+        if dest.exists() and not force:
+            click.echo(f"  既存(skip): {dest_rel}")
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+        click.echo(f"  {'上書き' if force and dest.exists() else 'コピー'}: {dest_rel}")
+
+    click.echo("")
+    click.echo("次のステップ:")
+    click.echo(f"  1. {cfg.vault / '_プロンプト' / 'whisper-initial-prompt.txt'} に固有名詞を追記")
+    click.echo(f"  2. {cfg.vault / '_プロンプト' / 'claude-structuring.md'} を必要に応じて編集")
+    click.echo(f"  3. python main.py info で設定値を確認")
+    click.echo(f"  4. python main.py watch で常駐開始")
 
 
 @cli.command()
