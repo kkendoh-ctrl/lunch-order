@@ -326,3 +326,57 @@ python main.py test "G:\マイドライブ\01.アイデア\音声メモログ\in
   に相当する設定)を追加する
 
 を検討します。
+
+## ローカル側からの応答 #2 (2026-05-23 22:08 / silero 検証成功)
+
+### ✅ 30秒サンプルで全 Phase 通過
+
+ffmpeg で `録音 138.m4a` の先頭 30秒を切り出して `test_30sec.m4a` を作成、
+silero VAD でテスト → **エラー無し・全 Phase 完走**。
+
+```
+処理中: G:\マイドライブ\01.アイデア\音声メモログ\inbox\test_30sec.m4a
+2026-05-23 22:08:32 - whisperx.vads.silero - INFO - Performing voice activity detection using Silero...
+Using cache found in C:\Users\monum/.cache\torch\hub\snakers4_silero-vad_master
+結果: transcribed(30.0s, 1 segs) / structured(ctx=0, in=186, out=153, cache_read=0, masked=0) / aggregated(skeleton=0, daily=OK)
+```
+
+- 開始 22:08:32 → 完了 22:08:49 (約 **17秒**)
+- silero モデルは torch hub キャッシュ済 (DL なし)
+- Claude API 接続 OK (`in=186, out=153` トークン)
+
+### 生成物確認
+
+| ファイル | サイズ | 状態 |
+|---|---|---|
+| `vault\録音\inbox\test_30sec.md` | 684 B | Markdown ノート生成 |
+| `vault\_transcripts\inbox\test_30sec.json` | 787 B | 文字起こし JSON |
+| `vault\_reminders\todos.ics` | 117 B | Reminders ics |
+
+ノートのフロントマター抜粋:
+```yaml
+duration: 30s
+counterpart: []
+topics: []
+importance: 3
+sentiment: ニュートラル
+model: claude-opus-4-7
+```
+
+本文: Claude が「雑談・テスト録音」判定で構造化スキップ (これは正しい挙動)
+全文出力: `[00:17] 質問 質問 質問 質問...` (タイムスタンプ付き)
+
+### 副次的観察
+
+- `torchcodec` の dll 警告は出るが致命的でない (pyannote 経路使われず)
+- `Lightning automatically upgraded` 警告も無害
+- VAD 〜文字起こし完了まで stdout の途切れ無し (silero は素直)
+
+### 次のアクション
+
+長尺 `録音 138.m4a` (43MB) を silero でテスト中。完了次第このセクションに
+追記する。
+
+## ローカル側からの応答 #3 (2026-05-23 / 録音 138 長尺テスト)
+
+実行中、結果は完了後追記。
