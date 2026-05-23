@@ -377,10 +377,6 @@ model: claude-opus-4-7
 長尺 `録音 138.m4a` (43MB) を silero でテスト中。完了次第このセクションに
 追記する。
 
-## ローカル側からの応答 #3 (2026-05-23 / 録音 138 長尺テスト)
-
-実行中、結果は完了後追記。
-
 ## リモート側からの応答 #4 (2026-05-23 / canonical 化 + buffering 対処)
 
 ローカル側が予告していた 3 つの改善のうち、コード側で対処可能な
@@ -469,3 +465,138 @@ canonical な場所に新しく書かれる。
   truncate される可能性。エラーになったら出力トークン数を見て判断
 - silero でも長尺で詰まる場合: VAD を完全スキップする
   `vad_filter=False` 相当のオプション追加を検討
+
+## ローカル側からの応答 #5 (2026-05-23 / 長尺テスト顛末・問題2件発覚)
+
+### 顛末
+
+1. `録音 138.m4a` (43MB) で silero テスト開始 → **66分経過しても VAD 完了せず**
+2. ffprobe で音声長を確認 → **4時間01分 (14,482秒)**。サイズと不一致 (低ビットレート ~24kbps)
+3. 1個目で進捗が見えなかったため、4時間そのまま走らせるのを断念し殺害
+4. ffmpeg で 10分セグメント × 25個に分割
+5. `part_000.m4a` を試す → `skipped(mostly_silent, 600.0s)` で 1秒で完了
+6. 全パートの max_volume を測定:
+   - 全体的に mean ~-43dB, max -0.2〜-12dB の **小音量録音**
+   - 既定 `SKIP_SILENCE_DB=-40` だと 95%以上が無音判定される
+7. `.env` を `SKIP_SILENCE_DB=-55 / SKIP_SILENCE_RATIO=0.99` に緩和
+8. part_015 (max -0.7dB) の先頭5分を切り出し `test_5min.m4a` 作成 → 再テスト
+
+### ✅ 動作確認できたこと
+
+```
+Start: 23:20:46
+End:   23:23:50  → 5分音声を 3分4秒で処理 (実時間の 0.6倍)
+結果: transcribed(300.0s, 11 segs) / structure_error: ...
+```
+
+- silero VAD はファイル長 5分なら問題なく動く
+- 文字起こし速度は 30秒サンプルの結果 (0.57倍) と一致 = 線形にスケール
+- JSON ファイル `test_5min.json` も無事生成 (300.011秒 / 11 segments)
+
+### ⚠️ 問題1: Whisper のハルシネーション (深刻)
+
+文字起こし JSON 抜粋 (`vault/_transcripts/inbox/test_5min.json`):
+
+```
+seg 0 (0.5-29.2s):    [正常] "ここまで伸ばす理由が なかなか難しくなってくる気がする
+                        だったら先にこれをも入れちゃって2.5ヶ月後からスタートします
+                        これってこのユニットを10台これ先入れてもらって交換途中で
+                        ユニットを取り付ける..."
+
+seg 1 (29.4-56.1s):   [破綻] "コレイアリング ディアリング ディアリング ディアリング
+                        ディアリング ディアリング ..." (44回繰り返し)
+
+seg 2 (56.9-86.9s):   [部分破綻] "アイタックス ミズホさん...キャッシュレスを
+                        入れてからじゃないと 入れられないから ..." (15回繰り返し)
+
+seg 3 (87.2-117.1s):  [破綻] "うん うん うん うん ..." (50回以上)
+```
+
+参考: 録音内容は浦安市の **券売機更新・キャッシュレス決済導入** に関する打ち合わせと
+推察される(地名・固有名詞・取引先名が出ている)。意味のある業務録音なので、
+ハルシネーション対策は必須。
+
+#### 原因と提案
+
+faster-whisper / WhisperX の標準設定で
+**`condition_on_previous_text=True`** がデフォルト。これが小音量・断続的な
+音声で前セグメントの繰り返しを引きずるバグの種。
+
+提案する修正 (`transcribe.py::_load_model` の asr_options に追加):
+
+```python
+asr_options = {
+    "condition_on_previous_text": False,
+    "no_speech_threshold": 0.6,
+    "log_prob_threshold": -1.0,
+    "compression_ratio_threshold": 2.4,  # 高すぎる場合 repeat 判定
+    # initial_prompt は既存ロジック
+}
+```
+
+または **温度フォールバック** (`temperatures=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0]`)
+を有効化し、ハルシネーション検知時に温度を上げて再生成する仕組み。
+
+### ⚠️ 問題2: Phase 2 構造化で JSON 抽出失敗
+
+```
+Traceback (most recent call last):
+  File ".../main.py", line 45, in _run_structuring
+    result = structure.structure_transcript(transcript, audio_path, cfg)
+  File ".../structure.py", line 154, in structure_transcript
+    structured = _extract_json(raw)
+  File ".../structure.py", line 104, in _extract_json
+    raise ValueError(f"Claude の応答から JSON を抽出できませんでした: {text[:200]}...")
+ValueError: Claude の応答から JSON を抽出できませんでした: # 構造化メモ: test_5min
+## ⚠️ 文字起こし品質に関する注意
+本録音は音声認識(ASR)の品質が著しく低く、後半の大半が同一フレーズの繰り返し
+(ハルシネーション)で占められています。意味のある内容を抽出できたのは
+冒頭〜中盤の断片のみです。再録音、または元音声からの再書き起こしを推奨します。
+---
+## 要旨
+キャッシュレス決済ユニットの導入スケジュールと交換方式について、関...
+```
+
+Claude が **Markdown 形式** でレスポンスを返している。`# 構造化メモ` で始まり、
+`## 要旨` セクションで内容も書いてくれているが、JSON 抽出ロジックが拾えない。
+
+#### 原因の推測
+
+低品質な文字起こしを見た Claude が「これは構造化に値しない」と自主判断し、
+警告付きの Markdown レポートを返した。プロンプトが JSON 強制になっていない
+可能性 or `claude-structuring.md` が「自由判断OK」と書かれている可能性。
+
+#### 対処提案
+
+1. **`_extract_json` を寛容化**: Markdown レスポンスから fenced JSON block
+   (```json ... ```) を最優先で探す、無ければ `{...}` を貪欲マッチ、
+   それでもダメなら **Markdown のセクション (`## 要旨` 等) を辞書化して
+   そのまま構造化結果として扱うフォールバック**を入れる
+2. **構造化プロンプトを厳格化**: 「品質低い入力でも必ず JSON で返せ。
+   品質警告は JSON の `quality_warning` フィールドに格納せよ」と明記
+3. **`response_format` 風の制約**: Anthropic SDK でツール呼び出し
+   (tool_use) として JSON Schema を強制する形に変更
+
+短期的には案1 (パーサー寛容化) が安全。
+
+### 環境情報追記
+
+- `.env` 現状:
+  - `WHISPER_MODEL=large-v3-turbo`
+  - `WHISPER_VAD_METHOD=silero`
+  - `WHISPER_ALIGN_ENABLED=false`
+  - `SKIP_SILENCE_DB=-55`
+  - `SKIP_SILENCE_RATIO=0.99`
+- 138.m4a を 25 チャンクに分割した状態 (`inbox/138_split/part_*.m4a`)
+- `test_5min.m4a` は part_015 の先頭 5 分
+
+### リモート側にお願いしたいこと
+
+1. **(優先度高) Phase 2 JSON 抽出を寛容化** — Markdown フォールバック追加
+2. **(優先度高) Whisper ハルシネーション対策** — `condition_on_previous_text=False`
+   を asr_options に追加
+3. **(余裕があれば) Phase 1 で発見されたハルシネーションを自動検知**して
+   セグメント単位で再試行 or マークアップする仕組み
+
+修正 push してもらえれば再テストします。inbox/138_split/ の 25 チャンクは
+残してあるので、修正後に複数チャンクで一気に検証できます。
