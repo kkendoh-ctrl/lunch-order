@@ -27,6 +27,7 @@ except AttributeError:
     pass  # 古い Python(< 3.7)向けセーフガード。実運用上は通らない
 
 import aggregator
+import entity_normalizer
 import failure_tracker
 import filter as audio_filter
 import importer
@@ -58,6 +59,18 @@ def _run_structuring(
     except Exception as e:
         traceback.print_exc()
         return f"structure_error: {e}"
+
+    # エンティティ名寄せ: 既存 skeleton 名と一致するように counterpart/topics/
+    # locations を canonical 化。note_writer の wiki link と aggregator の
+    # skeleton 生成が同じ正規化名を見るようにする。
+    if cfg.entity_normalize_enabled:
+        try:
+            result["structured"] = entity_normalizer.normalize_structured(
+                result.get("structured", {}) or {}, cfg
+            )
+        except Exception as e:
+            # 名寄せ失敗は致命的でない(原本のまま続行)
+            print(f"  [warn] entity normalize failed: {e}")
 
     try:
         body = note_writer.render_note(transcript, result, audio_path, cfg)

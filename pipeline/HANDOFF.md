@@ -2570,3 +2570,128 @@ structured_at: '2026-05-23T17:24:43.083577+00:00'
 - #2 は緊急性低い (手動 Remove-Item で代替可能)
 
 リモート側で判断 & push を待ちます。
+
+## リモート側からの応答 #13 (2026-05-24 / 残課題 #4: skeleton 名寄せ)
+
+✅ 優先順位逆転 (#4 → #2) を受け入れて #4 実装 & push 済。
+ローカルの理由(138_split 全件処理前に正規化が要る、`--force-all` は
+緊急性低い、「さん」付き揺れも同時対処)妥当。
+
+### 何を変えたか
+
+#### 1. `pipeline/entity_normalizer.py` 新規
+
+Phase 3 前段の純粋関数モジュール。正規化ルールは決定論的で保守的:
+
+1. **敬称末尾 strip**: `さん`/`様`/`氏`/`君`/`くん`/`ちゃん`/`先生`
+   (長い接尾辞を先に試して `ちゃん` を `ん` より優先 strip)
+2. **NFKC 正規化**: 全角英数 → 半角、半角カナ → 全角、結合文字統合
+3. **既存 skeleton ファイル名を canonical とみなして照合**
+
+主要関数:
+- `normalize(name)`: 比較用の正規形を返す
+- `find_canonical(name, existing)`: existing の中で同一エンティティを返す
+- `normalize_entity_list(names, existing)`: リスト単位の正規化 + 重複除去
+- `normalize_structured(structured, cfg)`: structure_transcript 結果を
+  vault スキャンで正規化(原本不変、新 dict 返す)
+
+#### 2. `main.py::_run_structuring` に挿入
+
+`structure.structure_transcript()` の直後、`note_writer.render_note()` の
+直前に呼ぶ。これで:
+- ノート frontmatter / wiki link が canonical 名で書かれる
+- aggregator もその canonical 名で skeleton を作る/参照する
+
+```python
+result = structure.structure_transcript(transcript, audio_path, cfg)
+if cfg.entity_normalize_enabled:
+    try:
+        result["structured"] = entity_normalizer.normalize_structured(
+            result.get("structured", {}) or {}, cfg
+        )
+    except Exception as e:
+        print(f"  [warn] entity normalize failed: {e}")
+body = note_writer.render_note(transcript, result, audio_path, cfg)
+```
+
+名寄せ失敗時は warn 出して原本続行(致命的でない)。
+
+#### 3. 設定
+
+`ENTITY_NORMALIZE_ENABLED=true` (デフォルト)。.env.example にコメント
+付き docs 追加。
+
+### 期待する効果
+
+応答 #13 の counterpart 揺れ:
+
+| 試行 | 抽出名 | 既存 skeleton | 正規化後 |
+|---|---|---|---|
+| 応答 #10 | アイテックス, ミズホ, リアックス | 無し | アイテックス, ミズホ, リアックス (新規) |
+| 応答 #12 | 遠藤, 瑞子, リアックス | アイテックス, ミズホ, リアックス | 遠藤, 瑞子, リアックス (リアックスは既存 hit) |
+| 応答 #13 | 瑞穂さん, リアックスさん | 上記 + 遠藤, 瑞子 | **リアックス (既存 hit), 瑞穂さん (新規)** |
+| (今後)  | 瑞穂 | 上記 + 瑞穂さん | **瑞穂さん (既存 hit)** ← 重複防止 |
+
+注意: 「瑞穂」(応答 #12 の "瑞子" とは別) と「瑞子」が現状別 skeleton として
+共存している場合は、今回の正規化では merge されない(別表記)。これは
+将来の AI judge / 手動 alias テーブルで対応する範疇。
+
+### 今回入れていないもの (将来候補)
+
+- **Edit distance**: アイタックス / アイテックス の typo merge — 過剰
+  マージリスクが高く、しきい値設定に実データの蓄積が必要
+- **Script-cross merge**: ミズホ / 瑞穂 / みずほ — AI judge or 手動
+  alias テーブルが現実的
+- **既存重複 skeleton の merge**: 名寄せ前に作られた重複(例:
+  vault/人物/瑞穂.md と vault/人物/瑞穂さん.md 両方存在)を 1 つにまとめる
+  one-off スクリプト — 必要になったら別 commit で
+
+### テスト
+
+新規 `tests/test_entity_normalizer.py` (17 件):
+- normalize の挙動(敬称 strip / 過剰 strip 防止 / NFKC / 内部空白保持)
+- find_canonical の exact match / 正規化 match / 逆方向 match / 無 match
+- normalize_entity_list の重複除去 / 順序保持 / 空文字スキップ
+- normalize_structured の フルフロー / vault 無し / 空 contexts / キー欠落
+- 原本不変性
+
+**全 180 件 pass**。
+
+### ローカル側でやること
+
+1. `git pull origin claude/voice-memo-recovery-ZT7v1`
+2. 既存 skeleton を確認(canonical 名として残るもの):
+   ```powershell
+   Get-ChildItem "G:\マイドライブ\01.アイデア\音声メモログ\vault\人物\","G:\マイドライブ\01.アイデア\音声メモログ\vault\トピック\","G:\マイドライブ\01.アイデア\音声メモログ\vault\場所\" -File | Select Directory, Name
+   ```
+3. test_5min.m4a 再テスト + ノート削除 + プロセス kill (いつものやつ)
+4. 応答 #14 として:
+   - 今回の counterpart / topics / locations が **既存 skeleton と一致した
+     ものはそのまま、新規揺れは canonical に置換**されているか確認
+   - 特に「リアックスさん」が既存「リアックス」(応答 #10 batch で作られた)
+     に hit して `[[リアックス]]` になっているか
+   - 新規 skeleton 増加数(応答 #12 と差分)
+5. 続けて 138_split から 4 本程度サンプル — 名寄せが正しく効くか観察
+6. 判定:
+   - ✅ 既存 skeleton に hit + 新規揺れ正規化 → 残課題 #2 (`--force-all`) へ
+   - ⚠️ 一部 hit せず → 該当 entity 貼って原因究明
+   - ❌ 過剰マージ(別人を同一視) → escalate(しきい値見直し)
+
+### 残課題の進行状況
+
+- [x] **#1 ハルシネーション後処理** (#11 実装 / #12 検証 ✅)
+- [x] **#3 time 値改善** (#12 実装 / #13 検証 ✅)
+- [x] **#4 skeleton 名寄せ** (#13 実装 / #14 検証待ち) ← 今回 (優先順入替)
+- [ ] **#2 `--force-all` オプション** ← 次
+
+#### 補足: 138_split の time 値懸念について
+
+応答 #13 で指摘された「ffmpeg 切り出し時刻が time に入る副作用」は確かに
+ある。回避策:
+- ffmpeg 切り出し時に `touch -r 録音138.m4a part_NNN.m4a` で元音声の
+  mtime をコピー(運用回避)
+- もしくは将来、`canonical_time` に「親音声 (元 138) の mtime を見る」
+  ヒューリスティクスを追加(設計重く優先度低)
+
+今回はコード変更しない。バッチ run 時にローカル側で touch 運用してもらえれば
+時刻が正しくなります。

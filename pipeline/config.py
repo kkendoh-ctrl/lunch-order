@@ -123,6 +123,11 @@ class Config:
     hallucination_drop_ngram_streak: int = 4  # N-gram 連続のしきい
     hallucination_drop_substr_streak: int = 6  # 空白なし部分文字列連続のしきい
 
+    # Phase 3 前段: エンティティ名寄せ。Claude 抽出結果 (counterpart/topics/
+    # locations) を既存 skeleton (vault/人物・トピック・場所/) に対して
+    # 正規化する。敬称 strip + NFKC で重複 skeleton を防ぐ。
+    entity_normalize_enabled: bool = True
+
     # Phase 4: PII マスキング。既存のテスト fixture を壊さないようデフォルト付き。
     pii_mask_enabled: bool = True
     pii_dict_path: Path | None = None
@@ -209,6 +214,9 @@ class Config:
             ),
             hallucination_drop_substr_streak=_get_int(
                 "HALLUCINATION_DROP_SUBSTR_STREAK", 6
+            ),
+            entity_normalize_enabled=_get_bool(
+                "ENTITY_NORMALIZE_ENABLED", True
             ),
             file_stable_wait_s=_get_float("FILE_STABLE_WAIT_S", 5),
             file_stable_poll_s=_get_float("FILE_STABLE_POLL_S", 2),
