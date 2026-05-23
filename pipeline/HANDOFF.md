@@ -2934,3 +2934,121 @@ retry [AUDIO] [--force-all]
 - 集約系(日次/一覧)は次の aggregate コマンドで再生成
 
 進めて良ければそのまま #5 着手します。STOP / 別案あれば指示ください。
+
+## ローカル側からの応答 #15 (2026-05-24 / 残課題 #2: --force-all 検証 + 全体 STOP 提案)
+
+### 結果サマリ: ✅ **--force-all 完璧に動作、当初残課題 1〜4 全件完了**
+
+| 観点 | 判定 |
+|---|---|
+| `--force-all` でノート上書き | **✅** 手動削除なしで mtime 更新 (`02:41:17 → 02:56:19`) |
+| Phase 1 (文字起こし) 再実行 | **✅** drop=5 で機能維持 |
+| Phase 2 (構造化) 再実行 | **✅** ctx=1 で機能維持 |
+| Phase 3 (集約) 再実行 | **✅** skeleton=2 で新規追加分のみ反映 |
+| time / entity_normalize 維持 | **✅** 全機能維持 |
+| パイプライン安定性 | **✅** exit 0、2:36 で完走 |
+
+### 実行ログ
+
+```
+---既存ノート確認 (削除しない)---
+test_5min.md 2026/05/24 2:41:17           # 応答 #14 時点のノート
+
+Start: 02:53:44
+処理中: G:\マイドライブ\01.アイデア\音声メモログ\inbox\test_5min.m4a
+結果: transcribed(300.0s, 11 segs, drop=5) / structured(ctx=1, in=2837, out=740, cache_read=0, masked=0) / aggregated(skeleton=2, daily=OK)
+End: 02:56:20
+
+---テスト後 mtime---
+test_5min.md 2026/05/24 2:56:19           # ✅ 上書きされた!
+```
+
+所要 2:36 (応答 #14 同等)。
+
+### 検証手順
+
+1. **削除せず** に既存ノート (`test_5min.md` mtime=02:41:17) を残置
+2. `python main.py test "...test_5min.m4a" --force-all` 実行
+3. 終了後にノート mtime を確認 → `02:56:19` = 上書きされた ✅
+
+`--force` だけでは保護されていたノートが、`--force-all` で確実に再生成
+されることを実証。
+
+### ✅ 当初残課題 1〜4 全件完了
+
+| 残課題 | 実装 | 検証 | 結果 |
+|---|---|---|---|
+| #1 ハルシネーション後処理 | リモート #11 (`e910d80`) | ローカル #12 | ✅ |
+| #2 `--force-all` オプション | リモート #14 (`ddec973`) | ローカル #15 | ✅ |
+| #3 `time` 値改善 | リモート #12 (`b61fe59`) | ローカル #13 | ✅ |
+| #4 skeleton 名寄せ (新規防止) | リモート #13 (`23a8f18`) | ローカル #14 | ✅ |
+
+### 累計達成事項 (パイプライン全体)
+
+#### Phase 1 (文字起こし)
+- ✅ WhisperX large-v3-turbo + silero VAD + アライメント無効化
+- ✅ 温度フォールバック + 圧縮率/log_prob/no_speech 閾値
+- ✅ ハルシネーション後処理 (4 ルール: blacklist / token_repeat / ngram_repeat / substr_repeat)
+- ✅ 30 分音声を bronzeman CPU で約 0.5x 実時間で処理
+
+#### Phase 2 (構造化)
+- ✅ Claude tool_use で JSON 必達化
+- ✅ Markdown fallback による安全網 (滅多に発動しないが残置)
+- ✅ PII マスキング (現状件数 0、将来用)
+
+#### Phase 3 (集約)
+- ✅ entity_normalizer による新規 skeleton 重複防止
+- ✅ canonical_date_folder で日付付き frontmatter
+- ✅ canonical_time でファイル mtime ベースの時刻
+
+#### Phase 5 (Reminders ics)
+- ✅ `_reminders/todos.ics` 自動更新
+
+#### 運用
+- ✅ `--force` (Phase 1 のみ再実行) / `--force-all` (全段再実行)
+- ✅ Tee-Object でリアルタイムログ表示
+- ✅ canonical 化前の inbox/直下入力にも対応 (mtime ベース)
+
+### 累計 Vault 状態 (応答 #15 時点)
+
+| カテゴリ | 件数 | 備考 |
+|---|---|---|
+| 録音/2026-05-23/ | 6 (test_5min + part_001/005/010/015/020) | 議事録レベル |
+| 人物/ | 16 | 重複 6 ペア残置 (cleanup 待ち) |
+| トピック/ | 32 | (今回 +1) |
+| 場所/ | 8 | |
+| 日次/ | 2 (2026-05-23.md + 旧 inbox.md) | |
+| _reminders/ | 1 (todos.ics) | |
+| _transcripts/ | 7 | |
+
+### 🛑 全体 STOP 提案
+
+**当初の残課題 1〜4 全件完了**、パイプラインは実運用可能水準に到達。
+今回の自動ループは大成功で終わってよい段階だと判断します。
+
+#### 残されているもの (次フェーズ候補、即時着手は不要)
+
+1. **#5 既存重複 skeleton cleanup**: リモート #14 で設計案あり
+   (alias テーブル + dry-run)。手動 alias 入力が必要なので、ユーザ
+   review してから着手するのが安全
+2. **138_split 全 25 パート batch 処理**: touch 運用で time 補正してから
+   実施。約 2 時間程度の処理時間見込み
+3. **inbox/ の他の録音 (録音 139, 140, 141, 142, 142(1)) 処理**:
+   ファイル分割 → batch
+4. **Phase 6 GiNZA NER** (`docs/phase6-ginza-ner.md` で設計済): 将来課題
+
+#### PR マージ判断
+
+このブランチ (`claude/voice-memo-recovery-ZT7v1`) は **マージ可能水準**。
+HANDOFF.md は PR レビュー後に削除 or `_archive/` 移動の想定。
+
+#### 提案
+
+リモート側 (claude.ai/code) に **STOP** シグナルを送ります。リモートは
+最終サマリを書いて終了。ユーザの判断で:
+
+- **このまま PR をマージ** → 本番運用開始
+- **#5 cleanup を先に実施** → `RESUME` コメントで再開
+- **追加機能要望** → 新規 issue / PR
+
+STOP
