@@ -1335,3 +1335,161 @@ description が一次ガイド、template が業務ドメイン補足という�
   を生やすのが筋
 
 ただし全部 tool_use の効果確認後に着手。先に応答 #8 待つ。
+
+## ローカル側からの応答 #8 (2026-05-24 / tool_use JSON 必達化検証)
+
+### a. ログ全文 (要点抜粋)
+
+```
+Start: 00:43:48
+処理中: G:\マイドライブ\01.アイデア\音声メモログ\inbox\test_5min.m4a
+[silero VAD / 既存の torchcodec / Lightning 警告]
+2026-05-24 00:43:57 - whisperx.vads.silero - INFO - Performing voice activity detection using Silero...
+Using cache found in C:\Users\monum/.cache\torch\hub\snakers4_silero-vad_master
+Traceback (most recent call last):
+  File "C:\Users\monum\projects\lunch-order\pipeline\main.py", line 57, in _run_structuring
+    result = structure.structure_transcript(transcript, audio_path, cfg)
+  File "C:\Users\monum\projects\lunch-order\pipeline\structure.py", line 273, in structure_transcript
+    response = client.messages.create(
+結果: transcribed(300.0s, 11 segs) / structure_error: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Thinking may not be enabled when tool_choice forces tool use.'}, 'request_id': 'req_011CbKm4h6XNJpVdiQzYDwVu'}
+End: 00:46:08
+```
+
+所要 2:20。Phase 1 完走、**Phase 2 で 400 エラー停止**。
+
+### b. structured タグ判定: ❌ **tool_use 出ない (400 エラー)**
+
+```
+structure_error: Error code: 400
+'Thinking may not be enabled when tool_choice forces tool use.'
+```
+
+`structured(ctx=N/...)` 行自体出ず、`structure_error` で停止。
+`response.content` 内訳の確認不可 (API 呼び出しが 400 で帰ってきたため、
+SDK は例外を投げ response オブジェクト自体取れない)。
+
+### c. フロントマター: ノート未生成
+
+```powershell
+PS> Test-Path "G:\マイドライブ\01.アイデア\音声メモログ\vault\録音\2026-05-23\test_5min.md"
+False
+```
+
+### d. ノート本文の `##` セクション: なし
+
+ノート未生成のため確認できず。
+
+### e. Phase 3 集約結果: 空
+
+```powershell
+PS> Get-ChildItem "G:\...\vault\人物\","G:\...\vault\トピック\","G:\...\vault\場所\" -File
+(出力なし。3 フォルダとも空)
+```
+
+Phase 2 失敗 → Phase 3 集約も走らず、skeleton ノート生成 0 件。
+
+### f. 総合判定: ❌ **tool_use 出ない**
+
+| 観点 | 判定 |
+|---|---|
+| /tool_use タグ | **❌** structure_error 停止 |
+| frontmatter | **❌** ノート未生成 |
+| Phase 3 集約 | **❌** 走らず |
+
+判定マトリクスの ❌ 行 (tool_use 出ない / SDK バージョン or API 仕様問題)
+に該当。エスカレーション必須。
+
+### 切り分け情報
+
+#### SDK / API バージョン
+
+```
+$ pip show anthropic
+Name: anthropic
+Version: 0.104.1
+Location: ...\.venv\Lib\site-packages
+```
+
+#### 該当コード箇所 (`pipeline/structure.py:273-288`)
+
+```python
+response = client.messages.create(
+    model=cfg.anthropic_model,
+    max_tokens=cfg.anthropic_max_tokens,
+    thinking={"type": "adaptive"},                                # ← 衝突
+    output_config={"effort": cfg.anthropic_effort},
+    system=[{...}],
+    messages=[{"role": "user", "content": user_content}],
+    tools=[tool_def],
+    tool_choice={"type": "tool", "name": _STRUCTURED_TOOL_NAME},  # ← 衝突
+)
+```
+
+#### Anthropic API のエラーメッセージ
+
+```json
+{
+  "type": "error",
+  "error": {
+    "type": "invalid_request_error",
+    "message": "Thinking may not be enabled when tool_choice forces tool use."
+  },
+  "request_id": "req_011CbKm4h6XNJpVdiQzYDwVu"
+}
+```
+
+#### 原因分析
+
+**Anthropic API の仕様制約**:
+`tool_choice={"type": "tool", "name": "..."}` で特定ツール強制呼び出しを
+指定する場合、`thinking={"type": "adaptive"}` (extended thinking) を併用
+できない。これは Anthropic 側の API レベル制約 (SDK のバグではない)。
+
+参考:
+- `tool_choice={"type": "any"}` (どれかのツールを必ず呼ぶ): thinking と
+  併用可能
+- `tool_choice={"type": "auto"}` (任意): thinking と併用可能だが、Markdown
+  応答に戻るリスクあり
+
+### リモート側への修正依頼 (応答 #8)
+
+#### 案 A: tool_choice 強制下で thinking を無効化
+
+```python
+# thinking と output_config の 2 行を消す
+response = client.messages.create(
+    model=cfg.anthropic_model,
+    max_tokens=cfg.anthropic_max_tokens,
+    system=[{...}],
+    messages=[{"role": "user", "content": user_content}],
+    tools=[tool_def],
+    tool_choice={"type": "tool", "name": _STRUCTURED_TOOL_NAME},
+)
+```
+
+構造化は比較的素直なタスクなので thinking 無くても精度差は微少と推測。
+
+#### 案 B (推奨): tool_choice を `{"type": "any"}` に変更
+
+ツールが 1 個 (`save_structured_memo`) だけなので、`any` は結果的に
+そのツールを必ず呼ぶ。**コード 1 行変更で thinking も JSON 必達も両立**。
+
+```python
+tool_choice={"type": "any"},   # any なら thinking と併用可能
+```
+
+#### 案 C: thinking 残し / tool_choice="auto" + 強い system prompt
+
+auto だと Claude が Markdown で返す可能性が残るので、応答 #7 で発覚した
+「品質低い入力時の自主判断」を抑えきれないリスクあり。**非推奨**。
+
+**推奨**: 案 B。コード 1 行変更で副作用最小、thinking も JSON 必達も両立。
+テストの変更も最小。
+
+### 次のアクション
+
+リモート側で `structure.py:287` を `tool_choice={"type": "any"}` に変更
+(案 B) する push を待つ。push されたら同じ手順で test_5min.m4a を再テスト
+し応答 #9 で報告予定。
+
+inbox/138_split/ の 25 チャンクは引き続き保持。
