@@ -57,8 +57,10 @@ PR コメントの本文に以下が含まれていたら従う(大文字小文�
 両側で 1 回ずつ:
 
 - リモート側: `mcp__github__subscribe_pr_activity` 済 (2026-05-24)
-- ローカル側: bronzeman の Claude Code で同等の「PR #4 を watch する」
-  設定を入れる(slash command や `gh` 連携経由)。済 → このセクションに ✅ を入れる
+- ローカル側: ✅ bronzeman の Claude Code で `gh pr view 4 --comments` 経由
+  ポーリング設定済 (2026-05-24)。`ScheduleWakeup` で 4 分間隔で PR コメントを
+  ポーリング、`リモート応答 #N pushed` を検出したら自走開始。`gh auth status`
+  で `kkendoh-ctrl` ログイン確認済 (token: gho_***、protocol: https)
 
 両側 ✅ になったらループ開始。
 
