@@ -30,16 +30,28 @@ def _load_model(cfg: Config):
             "language": cfg.whisper_language,
             "vad_method": cfg.whisper_vad_method,
         }
-        # asr_options: ハルシネーション抑止 (condition_on_previous_text=False)
-        # と initial_prompt を必要に応じて流し込む。空 dict なら渡さない。
-        asr_options: dict = {}
+        # asr_options: ハルシネーション抑止スタック + initial_prompt を組み立て。
+        # WhisperX 3.x はこれを faster-whisper の TranscriptionOptions へ
+        # 引き渡す。デフォルトを faster-whisper のデフォルト値で明示的に
+        # 上書きしているのは、WhisperX 経由だと一部の defaults が伝播しない
+        # ケースが観測されているため(`temperature` の単一値固定など)。
+        asr_options: dict = {
+            "temperatures": list(cfg.whisper_temperatures),
+            "compression_ratio_threshold": cfg.whisper_compression_ratio_threshold,
+            "log_prob_threshold": cfg.whisper_log_prob_threshold,
+            "no_speech_threshold": cfg.whisper_no_speech_threshold,
+            "repetition_penalty": cfg.whisper_repetition_penalty,
+        }
+        if cfg.whisper_hallucination_silence_threshold > 0:
+            asr_options["hallucination_silence_threshold"] = (
+                cfg.whisper_hallucination_silence_threshold
+            )
         if not cfg.whisper_condition_on_previous_text:
             asr_options["condition_on_previous_text"] = False
         prompt = cfg.load_initial_prompt()
         if prompt:
             asr_options["initial_prompt"] = prompt
-        if asr_options:
-            kwargs["asr_options"] = asr_options
+        kwargs["asr_options"] = asr_options
         _model_cache[key] = whisperx.load_model(cfg.whisper_model, **kwargs)
     return _model_cache[key]
 

@@ -39,6 +39,14 @@ def _get_bool(key: str, default: bool) -> bool:
     return _get(key, str(default)).lower() in ("true", "1", "yes", "on")
 
 
+def _get_float_tuple(key: str, default: tuple[float, ...]) -> tuple[float, ...]:
+    """カンマ区切り文字列 → tuple[float, ...]。未設定なら default を返す。"""
+    raw = os.environ.get(key, "")
+    if not raw.strip():
+        return default
+    return tuple(float(x.strip()) for x in raw.split(",") if x.strip())
+
+
 @dataclass(frozen=True)
 class Config:
     jpr_inbox: Path
@@ -77,6 +85,34 @@ class Config:
     # 発生する。False にすると各セグメント独立で生成され、ハルシネーション
     # 連鎖を断ち切れる。文脈一貫性は若干下がるが voice memo 用途では損が小さい。
     whisper_condition_on_previous_text: bool = False
+
+    # 温度フォールバック (faster-whisper の `temperature`)。リストを渡すと
+    # 各温度で順次試し、compression_ratio_threshold / log_prob_threshold を
+    # 満たすまでフォールバック。`(0.0,)` だけにすると無効化、低温固定で生成。
+    whisper_temperatures: tuple[float, ...] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
+
+    # 圧縮率しきい値。生成テキストを gzip した時の比率がこの値を超えると
+    # 「同一フレーズ連発(ハルシネーション)」とみなして温度を上げて再試行。
+    # FW デフォルト 2.4。低くするほど厳しい。
+    whisper_compression_ratio_threshold: float = 2.4
+
+    # 平均 log probability しきい値。これより低い (= 自信が無い) なら
+    # 温度を上げて再試行。FW デフォルト -1.0。
+    whisper_log_prob_threshold: float = -1.0
+
+    # 無音判定しきい値 (0〜1)。no_speech_prob がこの値を超えるセグメントは
+    # 文字起こしを破棄。FW デフォルト 0.6。下げるほど無音判定が緩い。
+    whisper_no_speech_threshold: float = 0.6
+
+    # 繰り返しペナルティ。1.0 = 無効、1.1 = 軽めの抑制 (同一トークンを
+    # 繰り返した時の確率を割引)。faster-whisper 1.2+ サポート。
+    # 業務会話で 1.1 程度なら正常文に悪影響なし。
+    whisper_repetition_penalty: float = 1.1
+
+    # faster-whisper 1.0+ の機能。0.0 = 無効、X.X = X.X 秒以上の無音区間が
+    # 検知されたら文字起こしをスキップ。小音量録音で VAD が誤って通した
+    # near-silent 区間からのハルシネーション抑止に効く。
+    whisper_hallucination_silence_threshold: float = 0.0
 
     # Phase 4: PII マスキング。既存のテスト fixture を壊さないようデフォルト付き。
     pii_mask_enabled: bool = True
@@ -129,6 +165,24 @@ class Config:
             whisper_vad_method=_get("WHISPER_VAD_METHOD", "pyannote"),
             whisper_condition_on_previous_text=_get_bool(
                 "WHISPER_CONDITION_ON_PREVIOUS_TEXT", False
+            ),
+            whisper_temperatures=_get_float_tuple(
+                "WHISPER_TEMPERATURES", (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
+            ),
+            whisper_compression_ratio_threshold=_get_float(
+                "WHISPER_COMPRESSION_RATIO_THRESHOLD", 2.4
+            ),
+            whisper_log_prob_threshold=_get_float(
+                "WHISPER_LOG_PROB_THRESHOLD", -1.0
+            ),
+            whisper_no_speech_threshold=_get_float(
+                "WHISPER_NO_SPEECH_THRESHOLD", 0.6
+            ),
+            whisper_repetition_penalty=_get_float(
+                "WHISPER_REPETITION_PENALTY", 1.1
+            ),
+            whisper_hallucination_silence_threshold=_get_float(
+                "WHISPER_HALLUCINATION_SILENCE_THRESHOLD", 0.0
             ),
             file_stable_wait_s=_get_float("FILE_STABLE_WAIT_S", 5),
             file_stable_poll_s=_get_float("FILE_STABLE_POLL_S", 2),

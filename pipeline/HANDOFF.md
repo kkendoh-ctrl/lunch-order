@@ -890,3 +890,101 @@ default で確認済 (b90f575 で導入された機能はパイプ的に通っ�
 リモート側で温度フォールバック導入の push を待つ。導入されたら同じ
 `test_5min.m4a --force` で再テストし応答 #8 で報告予定。
 inbox/138_split/ の 25 チャンクはそのまま保持。
+
+## リモート側からの応答 #6 (2026-05-23 / 温度フォールバック + ハルシネーション抑止スタック)
+
+✅ お願いされた 1 件目(温度フォールバック導入)対応 & push 済。2 件目
+(プロンプト強化)は今回は見送り — 今のフォールバックでもノートの中身は
+極めて有用と書いてもらった通りなので、まず温度フォールバックの効果を
+見てから判断したい。
+
+### 何を変えたか
+
+`transcribe.py::_load_model` の `asr_options` を **常時セット** する形に
+変更し、faster-whisper のハルシネーション抑止スタックを全部明示的に渡す。
+
+新しい `asr_options` (`.env` 未指定時のデフォルト):
+
+```python
+{
+    "temperatures": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],   # 温度フォールバック
+    "compression_ratio_threshold": 2.4,                # 圧縮率しきい
+    "log_prob_threshold": -1.0,                        # 平均 logprob しきい
+    "no_speech_threshold": 0.6,                        # 無音判定
+    "repetition_penalty": 1.1,                         # 同一トークン繰り返し抑制
+    "condition_on_previous_text": False,               # 既存
+    # hallucination_silence_threshold は .env で > 0 にしたときだけ追加
+    # initial_prompt も従来通り
+}
+```
+
+意図: ローカル側の指摘通り「WhisperX 経由だと FW の一部 default が伝播
+しないケースがある」(`temperature` が単一値固定になる等)を潰すため、
+FW デフォルト値であっても明示的に渡す。
+
+### 個別の効果(期待値)
+
+| パラメータ | 既存値 | 新デフォルト | ねらい |
+|---|---|---|---|
+| `temperatures` | 0.0 単一(?) | `[0.0..1.0]` 6 段階 | 高圧縮率セグメントを温度を上げて再生成 |
+| `compression_ratio_threshold` | (未渡し) | 2.4 | 同一フレーズ連発を検知 → 上記再生成へ |
+| `log_prob_threshold` | (未渡し) | -1.0 | 低信頼セグメント → 再生成へ |
+| `repetition_penalty` | (未渡し) | **1.1** | 同一トークン繰り返しの確率を割引 |
+| `no_speech_threshold` | (未渡し) | 0.6 | 無音区間に何かを書かない |
+| `hallucination_silence_threshold` | (未渡し) | 0 (無効) | `.env` で 2.0 にすると near-silent 区間スキップ |
+| `condition_on_previous_text` | False | False | 既存(維持) |
+
+### 設定ファイル
+
+`.env.example` を再編。コメント付きの個別 toggle を提供。新規追加:
+
+```env
+WHISPER_TEMPERATURES=0.0,0.2,0.4,0.6,0.8,1.0
+WHISPER_COMPRESSION_RATIO_THRESHOLD=2.4
+WHISPER_LOG_PROB_THRESHOLD=-1.0
+WHISPER_NO_SPEECH_THRESHOLD=0.6
+WHISPER_REPETITION_PENALTY=1.1
+WHISPER_HALLUCINATION_SILENCE_THRESHOLD=0.0
+```
+
+すべて未指定で動く(コード側 default 同値)。
+
+### テスト
+
+- `tests/test_transcribe.py` を再構成:
+  - 既存 5 ケースを新 asr_options 構造に合わせて更新
+  - 新規 2 ケース(hallucination_silence_threshold 条件付き / temperatures カスタム)
+- **全 128 件 pass**
+
+### ローカル側でやること
+
+1. `git pull origin claude/voice-memo-recovery-ZT7v1`
+2. `.env` に追記(任意。デフォルト値と同じなら省略可):
+   ```env
+   WHISPER_REPETITION_PENALTY=1.1
+   WHISPER_HALLUCINATION_SILENCE_THRESHOLD=2.0
+   ```
+   特に `HALLUCINATION_SILENCE_THRESHOLD=2.0` は小音量録音には効くはず
+3. python プロセス殺してモデルキャッシュ無効化
+4. `test_5min.m4a --force` で再テスト
+5. 応答 #7 として HANDOFF.md に貼る:
+   - ログ全文
+   - seg 0〜10 の表(前回と同じフォーマット)
+   - **v1 / v2 / v3 の 3 段並べたハルシネーション量比較**
+   - 所要時間(温度フォールバックで遅くなる可能性あり)
+
+### 想定される 3 ケース
+
+| ケース | 観測 | 次アクション |
+|---|---|---|
+| A. ほぼ解消 | seg 1, 3, 6 など、繰り返し部分が短文に置換される | inbox/138_split から 4 本連続テストへ |
+| B. 部分改善 | 一部 seg は治るが、ビザ ビザ や YouTube 系は残る | `WHISPER_HALLUCINATION_SILENCE_THRESHOLD=2.0` を試す or 該当 seg のみ温度範囲を広げる |
+| C. 変化なし | v2 とほぼ同じ | WhisperX が asr_options を一部 drop してる可能性。WhisperX を直接呼ぶ最小再現スクリプトで切り分け |
+
+### 別途気になっていること
+
+- ノートのフロントマター `date: ''` / `time: ''` が空 → `_enrich_transcript_meta`
+  が時刻判定できていない。`canonical_date_folder` は `inbox/` 直下用に
+  作ったけど time は別途。**修正**: transcript 側に既に
+  `transcribed_at` があるので、これを stem と組み合わせるか mtime から
+  HH:MM:SS を生やすか。優先度は低い(機能影響は微)けど次回ついでに直す
