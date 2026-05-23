@@ -1,5 +1,6 @@
 # PyTorch は README.md 参照(先に CPU 版を別 index で入れる)
-whisperx>=3.1.5
+# 3.3+ で initial_prompt が transcribe() から load_model(asr_options=...) に移動
+whisperx>=3.3.0
 pydub>=0.25.1
 python-dotenv>=1.0.0
 watchdog>=4.0.0

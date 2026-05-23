@@ -221,3 +221,41 @@ def transcribe(audio_path: Path, cfg: Config) -> dict:
 - リモート側で `transcribe.py` 修正 & push を待つ
 - 修正後、再度 `git pull` してテスト再実行
 - HF キャッシュは保持されるので、2回目はモデル DL なしで即走る (時間短縮)
+
+## リモート側からの応答 #2 (2026-05-23 / WhisperX API 修正)
+
+✅ 修正完了 & push 済。`git pull` で取り込めます。
+
+### 変更内容
+
+1. **`transcribe.py::_load_model`** で `initial_prompt` を `asr_options={"initial_prompt": ...}` 経由で渡すように変更。提案いただいた形をベースに、`prompt` が空文字なら `asr_options` 自体を渡さないようにして WhisperX デフォルトを尊重(空文字を上書きすると挙動が変わる可能性があるため)
+2. **`transcribe.py::transcribe`** の `transcribe_kwargs` を撤去、`model.transcribe(audio)` だけに
+3. **キャッシュキー**: prompt はキーに含めない方針で確定。コメントで「cfg は process-static なので変えたければプロセス再起動」と明記
+4. **`requirements.txt`**: `whisperx>=3.1.5` → `whisperx>=3.3.0` に引き上げ(古い API の whisperx が新規環境で引かれないように)
+5. **`tests/test_transcribe.py`** を新規追加(5 ケース)
+   - `initial_prompt` が `asr_options` 経由で正しく渡されるか
+   - 空文字 / 無設定 / ファイル無し ならば `asr_options` を渡さないか
+   - in-process キャッシュが効くか
+   - `whisperx` モジュールを `monkeypatch.setitem(sys.modules, ...)` でスタブ化、実モデル DL 不要
+
+全 98 テスト pass を確認済。
+
+### ローカル側で再テスト時
+
+1. `git pull origin claude/voice-memo-recovery-ZT7v1`
+2. venv 内なので追加 install は不要 (whisperx 3.8.5 のままで OK)
+3. `python main.py test "G:\マイドライブ\01.アイデア\音声メモログ\inbox\録音 138.m4a"`
+4. HF キャッシュは前回 DL 済の `mobiuslabsgmbh--faster-whisper-large-v3-turbo` をそのまま使うので、モデル DL なしですぐに文字起こし開始するはず
+
+期待する出力(再掲):
+```
+処理中: G:\...\録音 138.m4a
+結果: transcribed(<秒数>, <セグメント数> segs) / structured(ctx=N, in=..., out=..., cache_read=0, masked=N) / aggregated(skeleton=N, daily=OK)
+```
+
+### 想定される次の罠
+
+ここから先で起きそうな問題と対処メモ:
+- **`whisperx.align` の API 変更**: `_load_align_model` も `whisperx.load_align_model(...)` を呼んでいる。同様に WhisperX 3.x で `model_name` キーワード必須になっている可能性あり。エラー出たら traceback 貼ってください
+- **アライメント不要なら `WHISPER_ALIGN_ENABLED=false`** にして回避できる(.env で設定)
+- **Claude 構造化での JSON パースエラー**: Phase 2 のプロンプト出力が不正なら `_extract_json` がフォールバックを試みるが、それでも失敗するなら `_失敗/` には行かず `structure_error` で止まる(現状)。要 traceback

@@ -13,17 +13,26 @@ _model_cache: dict[str, Any] = {}
 
 
 def _load_model(cfg: Config):
-    """WhisperX モデルをロード。プロセス内で1回だけ。"""
+    """WhisperX モデルをロード。プロセス内で1回だけ。
+
+    WhisperX 3.x で `initial_prompt` の渡し方が変わった:
+      旧: `model.transcribe(audio, initial_prompt=...)`
+      新: `whisperx.load_model(..., asr_options={"initial_prompt": ...})`
+    cfg は process-static なので prompt もプロセス内では変わらない前提。
+    キャッシュキーには含めない(変えたければプロセス再起動)。"""
     import whisperx  # 重いので関数内 import
 
     key = f"{cfg.whisper_model}:{cfg.whisper_device}:{cfg.whisper_compute_type}"
     if key not in _model_cache:
-        _model_cache[key] = whisperx.load_model(
-            cfg.whisper_model,
-            device=cfg.whisper_device,
-            compute_type=cfg.whisper_compute_type,
-            language=cfg.whisper_language,
-        )
+        kwargs: dict = {
+            "device": cfg.whisper_device,
+            "compute_type": cfg.whisper_compute_type,
+            "language": cfg.whisper_language,
+        }
+        prompt = cfg.load_initial_prompt()
+        if prompt:
+            kwargs["asr_options"] = {"initial_prompt": prompt}
+        _model_cache[key] = whisperx.load_model(cfg.whisper_model, **kwargs)
     return _model_cache[key]
 
 
@@ -79,12 +88,8 @@ def transcribe(audio_path: Path, cfg: Config) -> dict:
     model = _load_model(cfg)
     audio = whisperx.load_audio(str(audio_path))
 
-    initial_prompt = cfg.load_initial_prompt()
-    transcribe_kwargs = {}
-    if initial_prompt:
-        transcribe_kwargs["initial_prompt"] = initial_prompt
-
-    result = model.transcribe(audio, **transcribe_kwargs)
+    # initial_prompt は _load_model 内で asr_options 経由で注入済(WhisperX 3.x)
+    result = model.transcribe(audio)
 
     # 単語レベルアライメント(任意)
     if cfg.whisper_align_enabled:
