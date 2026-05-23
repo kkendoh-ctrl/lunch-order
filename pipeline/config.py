@@ -38,6 +38,7 @@ class Config:
     jpr_inbox: Path
     vault: Path
     transcripts_dir: Path
+    notes_dir: Path
 
     skip_duration_s: float
     skip_silence_ratio: float
@@ -53,15 +54,26 @@ class Config:
     file_stable_wait_s: float
     file_stable_poll_s: float
 
+    anthropic_api_key: str
+    anthropic_model: str
+    anthropic_max_tokens: int
+    anthropic_effort: str
+    structuring_prompt_path: Path | None
+
     @classmethod
     def load(cls) -> "Config":
         vault = _get_path("VAULT_PATH")
         initial_prompt_rel = _get("WHISPER_INITIAL_PROMPT_PATH")
         initial_prompt_path = vault / initial_prompt_rel if initial_prompt_rel else None
+        structuring_prompt_rel = _get("STRUCTURING_PROMPT_PATH")
+        structuring_prompt_path = (
+            vault / structuring_prompt_rel if structuring_prompt_rel else None
+        )
         return cls(
             jpr_inbox=_get_path("JPR_INBOX_PATH"),
             vault=vault,
             transcripts_dir=vault / "_transcripts",
+            notes_dir=vault / "録音",
             skip_duration_s=_get_float("SKIP_DURATION_THRESHOLD_S", 10),
             skip_silence_ratio=_get_float("SKIP_SILENCE_RATIO", 0.95),
             skip_silence_db=_get_float("SKIP_SILENCE_DB", -40),
@@ -73,6 +85,11 @@ class Config:
             whisper_align_enabled=_get_bool("WHISPER_ALIGN_ENABLED", True),
             file_stable_wait_s=_get_float("FILE_STABLE_WAIT_S", 5),
             file_stable_poll_s=_get_float("FILE_STABLE_POLL_S", 2),
+            anthropic_api_key=_get("ANTHROPIC_API_KEY"),
+            anthropic_model=_get("ANTHROPIC_MODEL", "claude-opus-4-7"),
+            anthropic_max_tokens=_get_int("ANTHROPIC_MAX_TOKENS", 8192),
+            anthropic_effort=_get("ANTHROPIC_EFFORT", "medium"),
+            structuring_prompt_path=structuring_prompt_path,
         )
 
     def load_initial_prompt(self) -> str | None:
@@ -81,6 +98,17 @@ class Config:
         if not self.whisper_initial_prompt_path.exists():
             return None
         return self.whisper_initial_prompt_path.read_text(encoding="utf-8").strip()
+
+    def load_structuring_prompt(self) -> str | None:
+        if not self.structuring_prompt_path:
+            return None
+        if not self.structuring_prompt_path.exists():
+            return None
+        return self.structuring_prompt_path.read_text(encoding="utf-8")
+
+    @property
+    def structuring_enabled(self) -> bool:
+        return bool(self.anthropic_api_key)
 
 
 def transcript_path_for(cfg: Config, audio_path: Path) -> Path:
@@ -103,3 +131,15 @@ def is_already_processed(cfg: Config, audio_path: Path) -> bool:
         transcript_path_for(cfg, audio_path).exists()
         or skipped_marker_path_for(cfg, audio_path).exists()
     )
+
+
+def note_path_for(cfg: Config, audio_path: Path) -> Path:
+    """audio: .../Just Press Record/2026-05-23/13-39-19.m4a
+       → .../音声記憶/録音/2026-05-23/13-39-19.md"""
+    date_folder = audio_path.parent.name
+    stem = audio_path.stem
+    return cfg.notes_dir / date_folder / f"{stem}.md"
+
+
+def is_structured(cfg: Config, audio_path: Path) -> bool:
+    return note_path_for(cfg, audio_path).exists()

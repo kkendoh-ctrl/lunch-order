@@ -21,6 +21,7 @@ def _mk_cfg(tmp_path: Path) -> Config:
         jpr_inbox=tmp_path / "jpr",
         vault=tmp_path / "vault",
         transcripts_dir=tmp_path / "vault" / "_transcripts",
+        notes_dir=tmp_path / "vault" / "録音",
         skip_duration_s=10,
         skip_silence_ratio=0.95,
         skip_silence_db=-40,
@@ -32,6 +33,11 @@ def _mk_cfg(tmp_path: Path) -> Config:
         whisper_align_enabled=False,
         file_stable_wait_s=5,
         file_stable_poll_s=2,
+        anthropic_api_key="",
+        anthropic_model="claude-opus-4-7",
+        anthropic_max_tokens=8192,
+        anthropic_effort="medium",
+        structuring_prompt_path=None,
     )
 
 

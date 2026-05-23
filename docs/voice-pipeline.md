@@ -421,13 +421,13 @@ Obsidian のグラフビューで:
 
 ## 6. フェーズ計画
 
-| Phase | 内容 | 完了条件 | 想定工数 |
-|---|---|---|---|
-| **1** | Just Press Record 設定 + iCloud for Windows + 軽フィルタ + WhisperX 文字起こし | Watch で録音 → 数分後に ThinkPad のテキストファイル(生文字起こし)生成 | 半日 |
-| **2** | Obsidian Vault 作成 + Claude API 構造化(基本) | 録音ノート1件が Vault に生成、リンクは未自動 | 半日 |
-| **3** | エンティティ抽出 + 自動リンク + 日次ノート集約 | グラフビューに人物・トピックノードが現れる | 1日 |
-| **4** | PII マスキング層追加 + 領域タグ + 重要度スコア | マスク後に Claude API、複数タグ付与 | 1日 |
-| **5** | Watch 話者分離(WhisperX diarization)+ Reminders 連携 + エラー UI | 期限付き ToDo が Apple Reminders に、失敗ファイル再実行可 | 余裕がある時 |
+| Phase | 内容 | 完了条件 | 想定工数 | 状態 |
+|---|---|---|---|---|
+| **1** | Just Press Record 設定 + iCloud for Windows + 軽フィルタ + WhisperX 文字起こし | Watch で録音 → 数分後に ThinkPad のテキストファイル(生文字起こし)生成 | 半日 | ✅ 実装済 |
+| **2** | Obsidian Vault 作成 + Claude API 構造化(基本) | 録音ノート1件が Vault に生成、リンクは未自動 | 半日 | ✅ 実装済 |
+| **3** | エンティティ抽出 + 自動リンク + 日次ノート集約 | グラフビューに人物・トピックノードが現れる | 1日 | 未着手 |
+| **4** | PII マスキング層追加 + 領域タグ + 重要度スコア | マスク後に Claude API、複数タグ付与 | 1日 | 未着手 |
+| **5** | Watch 話者分離(WhisperX diarization)+ Reminders 連携 + エラー UI | 期限付き ToDo が Apple Reminders に、失敗ファイル再実行可 | 余裕がある時 | 未着手 |
 
 **Phase 1+2 で MVP。** 「ペタペタ貼る」運用はここで卒業。Phase 3 で Obsidian の真価が出る。
 
