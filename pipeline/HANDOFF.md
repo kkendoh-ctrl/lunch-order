@@ -1547,3 +1547,138 @@ SDK バージョン(`anthropic==0.104.1`)依存の問題に絞り込める。
 - `_enrich_transcript_meta` の time 空問題
 
 これは tool_use 動作確認後にまとめて。
+
+## ローカル側からの応答 #9 (2026-05-24 / tool_choice=any 検証)
+
+### 結果: ❌ **同じ 400 エラーが再発**
+
+```
+Start: 01:02:00
+処理中: G:\マイドライブ\01.アイデア\音声メモログ\inbox\test_5min.m4a
+2026-05-24 01:02:09 - whisperx.vads.silero - INFO - Performing voice activity detection using Silero...
+Traceback (most recent call last):
+  File "C:\Users\monum\projects\lunch-order\pipeline\main.py", line 57, in _run_structuring
+    result = structure.structure_transcript(transcript, audio_path, cfg)
+  File "C:\Users\monum\projects\lunch-order\pipeline\structure.py", line 280, in structure_transcript
+    response = client.messages.create(
+結果: transcribed(300.0s, 11 segs) / structure_error: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Thinking may not be enabled when tool_choice forces tool use.'}, 'request_id': 'req_011CbKnTDBzihanLLSMuCAg2'}
+End: 01:04:20
+```
+
+所要 2:20。応答 #8 と完全に同じエラーパターン。
+
+### 修正反映確認
+
+```
+$ grep -n "tool_choice" pipeline/structure.py
+273:    # tool_choice は `{"type": "any"}` を使う。理由:
+283:    thinking={"type": "adaptive"},
+294:    tool_choice={"type": "any"},        ← c6ca29d で any に変更されている
+```
+
+`thinking` と `tool_choice={"type": "any"}` の組み合わせで送信されている。
+それでも Anthropic API は「Thinking may not be enabled when tool_choice
+**forces tool use**」と返してくる。
+
+### 切り分け: **Anthropic API の "forces tool use" 判定範囲**
+
+応答 #8 で私が「`any` は thinking と併用可能」と書きましたが、**これは
+誤情報でした**。今回の 400 エラーが明確に示している通り、Anthropic API は
+以下を **すべて「強制」と判定** しています:
+
+| tool_choice | thinking との併用 | 結果 |
+|---|---|---|
+| `{"type": "tool", "name": "..."}` | ❌ 不可 | 応答 #8 で確認 |
+| `{"type": "any"}` | ❌ 不可 | **応答 #9 で確認** |
+| `{"type": "auto"}` | ✅ 可 | 未検証 |
+| 指定なし (default = auto 相当) | ✅ 可 | 既存 (応答 #6 以前の) 動作 |
+
+つまり Anthropic 的には「tool が必ず呼ばれる保証がある = 強制」=
+extended thinking と相性悪い。`any` も「any tool but at least one」なので
+強制扱い。
+
+### request_id (Anthropic サポート問合せ用)
+
+- 応答 #8: `req_011CbKm4h6XNJpVdiQzYDwVu`
+- 応答 #9: `req_011CbKnTDBzihanLLSMuCAg2`
+
+### SDK バージョン (再掲)
+
+```
+$ pip show anthropic
+Name: anthropic
+Version: 0.104.1
+```
+
+### 確定した解決策の選択肢
+
+#### 案 A (推奨): thinking を完全に外す
+
+応答 #8 で「案 A」と呼んでいたもの。tool_choice 強制 (tool/any 問わず)
+の利点 (JSON 必達) を取り、thinking の利点 (深い推論) を捨てる。
+
+```python
+# structure.py L283 / L284 を削除
+# thinking={"type": "adaptive"},
+# output_config={"effort": cfg.anthropic_effort},
+
+response = client.messages.create(
+    model=cfg.anthropic_model,
+    max_tokens=cfg.anthropic_max_tokens,
+    system=[{...}],
+    messages=[{"role": "user", "content": user_content}],
+    tools=[tool_def],
+    tool_choice={"type": "tool", "name": _STRUCTURED_TOOL_NAME},  # "tool" に戻すか "any" のまま
+)
+```
+
+理由:
+- 構造化タスクは音声書き起こし text を JSON にする「整形」作業で、
+  thinking が劇的に効くタスクではない (応答 #7 の議事録ノートも thinking
+  ありで生成された質ではあるが、入力 transcript の質が支配的)
+- JSON 必達 > 深い推論
+
+#### 案 D (新案、難易度高): `tool_choice="auto"` + 強力 system prompt
+
+thinking の利点を残し、Markdown 回帰リスクを system prompt で抑え込む。
+
+```python
+thinking={"type": "adaptive"},
+output_config={"effort": cfg.anthropic_effort},
+tools=[tool_def],
+tool_choice={"type": "auto"},
+# system に「必ず save_structured_memo ツールを呼べ。応答テキストは不要」と明記
+```
+
+応答 #7 で観測した「品質低い入力時の Markdown 自主判断」を抑え切れるかは
+**実験次第**。1 回試して駄目なら案 A に切り替えるべき。
+
+#### 案 E (奥の手): 2 段呼び出し
+
+1. **第 1 呼び出し**: `tool_choice="auto"` + thinking ありで「構造化方針を
+   考えてから tool 呼べ」と指示
+2. **第 2 呼び出し**: 第 1 で抽出された JSON 候補を `tool_choice="tool"`
+   強制で正規化
+
+API call 2 回でコスト 2 倍、複雑度も上がる。応答 #7 のノート品質が維持
+できなかった場合のみ検討。
+
+### 私の推奨
+
+**案 A** (thinking 削除) を即時適用。理由:
+
+1. 1 行削除でテスト可能、回帰リスク最小
+2. 応答 #7 で観測した「議事録レベルのノート」は thinking 無くても
+   入力 transcript が良ければ生成できるはず (tool_use で抽出キーが
+   明示されているため Claude は構造化に集中できる)
+3. 副作用観察後に「thinking 戻したい」となったら案 D / E に進む
+
+### 次のアクション
+
+リモート側で案 A (thinking と output_config の 2 行削除) を実装 & push して
+ほしい。push されたら同じ手順で test_5min.m4a を再テストし応答 #10 で
+報告予定。
+
+なお応答 #8 で「案 B 推奨」と書いた件は誤情報を提供してしまい申し訳ない
+(Anthropic API の "forces tool use" 判定範囲を取り違えていた)。今回の
+切り分けで確実な情報になりました。
