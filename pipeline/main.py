@@ -1,8 +1,8 @@
-"""Phase 1+2 CLI: info / test / batch / watch / structure。
+"""Phase 1+2+3 CLI: info / test / batch / watch / structure / aggregate。
 
 watch / batch では Phase 1 (WhisperX) → Phase 2 (Claude 構造化 → Vault ノート)
-を自動連鎖する。ANTHROPIC_API_KEY 未設定なら Phase 2 はスキップし
-Phase 1 だけで止まる(_transcripts/ に JSON が残る)。
+→ Phase 3 (エンティティ skeleton + 日次ノート + 一覧再生成) を自動連鎖する。
+ANTHROPIC_API_KEY 未設定なら Phase 2/3 はスキップし Phase 1 だけで止まる。
 """
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from pathlib import Path
 
 import click
 
+import aggregator
 import filter as audio_filter
 import note_writer
 import structure
@@ -49,7 +50,7 @@ def _run_structuring(
         note_writer.save_note(body, out)
         n_ctx = len(result.get("structured", {}).get("contexts", []) or [])
         usage = result.get("usage", {})
-        return (
+        structure_msg = (
             f"structured(ctx={n_ctx}, in={usage.get('input_tokens', 0)}, "
             f"out={usage.get('output_tokens', 0)}, "
             f"cache_read={usage.get('cache_read_input_tokens', 0)})"
@@ -57,6 +58,21 @@ def _run_structuring(
     except Exception as e:
         traceback.print_exc()
         return f"note_write_error: {e}"
+
+    try:
+        summary = aggregator.aggregate_after_note(
+            result.get("structured", {}) or {}, audio_path, cfg
+        )
+        skels = summary["skeletons"]
+        new_count = sum(len(v) for v in skels.values())
+        agg_msg = (
+            f"aggregated(skeleton={new_count}, daily={'OK' if summary['daily'] else 'skip'})"
+        )
+    except Exception as e:
+        traceback.print_exc()
+        agg_msg = f"aggregate_error: {e}"
+
+    return f"{structure_msg} / {agg_msg}"
 
 
 def _process_one(audio_path: Path, cfg: Config, force: bool = False) -> str:
@@ -220,6 +236,28 @@ def structure_cmd(transcript_path: Path, force: bool) -> None:
 
 # Click のサブコマンド名は kebab-case 推奨
 cli.add_command(structure_cmd, name="structure")
+
+
+@cli.command()
+def aggregate() -> None:
+    """既存ノートから skeleton / 日次 / 一覧 を全部再生成(Phase 3 単体実行)。
+
+    Phase 2 完了後の集約処理は通常 watch/batch/test が自動連鎖するが、
+    手動で frontmatter を直したあとなど、明示的に再生成したい場合はこれ。"""
+    cfg = Config.load()
+    if not cfg.vault.exists():
+        raise click.ClickException(f"VAULT_PATH が存在しない: {cfg.vault}")
+    click.echo(f"Vault スキャン: {cfg.vault}")
+    summary = aggregator.aggregate_full(cfg)
+    click.echo(f"  録音ノート: {summary['scanned']} 件")
+    skels = summary["skeletons"]
+    click.echo(
+        f"  skeleton 新規: 人物 {len(skels['人物'])} / "
+        f"トピック {len(skels['トピック'])} / 場所 {len(skels['場所'])}"
+    )
+    click.echo(f"  日次ノート: {len(summary['dailies'])} 本")
+    click.echo(f"  一覧: {summary['indexes']['todo']}")
+    click.echo(f"  一覧: {summary['indexes']['important']}")
 
 
 @cli.command()
