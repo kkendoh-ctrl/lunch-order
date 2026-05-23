@@ -1682,3 +1682,69 @@ API call 2 回でコスト 2 倍、複雑度も上がる。応答 #7 のノー�
 なお応答 #8 で「案 B 推奨」と書いた件は誤情報を提供してしまい申し訳ない
 (Anthropic API の "forces tool use" 判定範囲を取り違えていた)。今回の
 切り分けで確実な情報になりました。
+
+## リモート側からの応答 #9 (2026-05-24 / 案 A 適用: thinking 削除)
+
+✅ 案 A 適用 & push 済。
+
+切り分けに脱帽 — `{"type": "any"}` でも 400 になる挙動は私も把握して
+なかったので、request_id まで添えてくれて助かりました。
+
+### 変更内容
+
+`structure.py::structure_transcript`:
+
+```python
+# 削除:
+#     thinking={"type": "adaptive"},
+#     output_config={"effort": cfg.anthropic_effort},
+
+# tool_choice を明示的なツール指定に戻す(thinking 衝突は消えた):
+tool_choice={"type": "tool", "name": _STRUCTURED_TOOL_NAME},
+```
+
+コメントで「tool_choice 強制 (tool/any 両方) × thinking は API 仕様で
+不可」と明文化。今後 thinking を戻したくなったら案 D (`auto` + 強い
+system prompt) or 案 E (2 段呼出) を検討、という選択肢も残す。
+
+`anthropic_effort` の Config フィールド自体は残置 — `info` コマンドで
+表示しているため、また将来 thinking を戻す可能性を残す意味でも。
+
+### テスト
+
+- `test_structure_transcript_forces_tool_choice`:
+  - `tool_choice == {"type": "tool", "name": "save_structured_memo"}` に戻す
+  - `"thinking" not in captured` / `"output_config" not in captured` を assert
+    (案 D/E に進む時の誤回帰防止)
+- **全 135 件 pass**
+
+### 期待効果
+
+| 項目 | 応答 #8 → #9 (any/thinking) | 応答 #10 想定 (tool/no-thinking) |
+|---|---|---|
+| 400 エラー | 出る | **出ない** |
+| `/tool_use` タグ | 観測前 | 出るはず |
+| frontmatter | 観測前 | 埋まるはず |
+| ノート品質 | 観測前 | 入力 transcript の質が支配的、議事録レベル維持期待 |
+
+### ローカル側でやること
+
+応答 #8 と同じ手順:
+
+1. `git pull origin claude/voice-memo-recovery-ZT7v1`
+2. ノート削除 + プロセス kill
+3. `python main.py test "...test_5min.m4a" --force 2>&1 | Tee-Object out_5min_v6.log`
+4. 主要シグナル 3 つ確認 → 応答 #10 に追記:
+   - `structured(ctx=N/tool_use, ...)` の `/tool_use` タグ
+   - frontmatter の埋まり具合
+   - `vault/人物/`, `vault/トピック/`, `vault/場所/` の skeleton
+5. ✅ 完全成功なら inbox/138_split/ から part_005/010/015/020 順次 test
+6. ⚠️ frontmatter 一部空 or ❌ 別の API エラーなら escalate
+
+### 次回フェーズ予定
+
+- ✅ 完全成功なら: 残課題(seg 1/9 ハルシネーション後処理 / `--force-all` /
+  `_enrich_transcript_meta` time 空)を順次対応
+- ⚠️ 部分成功なら: 空キーの schema description を強化(例: counterpart は
+  「必ず 1 人以上、登場人物が無ければ "(不明)" を入れる」など)で再試行
+- ❌ なら: 案 D (`auto` + 強い system prompt) を試す

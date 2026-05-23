@@ -356,11 +356,16 @@ def test_structure_transcript_forces_tool_choice(
     ):
         assert key in ctx_props, f"schema に {key} が無い"
 
-    # tool_choice は any (thinking と併用可能)。tools 配列が 1 個なので
-    # 結果的に save_structured_memo を必ず呼ぶ。
-    assert captured["tool_choice"] == {"type": "any"}
-    # thinking も同居していることを確認 (案 A で消した場合の回帰防止)
-    assert captured["thinking"] == {"type": "adaptive"}
+    # tool_choice は特定ツール指定で save_structured_memo を強制呼出。
+    assert captured["tool_choice"] == {
+        "type": "tool",
+        "name": "save_structured_memo",
+    }
+    # Anthropic API は tool_choice 強制と thinking の併用を拒否するため
+    # (400: "Thinking may not be enabled when tool_choice forces tool use.")、
+    # thinking / output_config は messages.create に渡さない。
+    assert "thinking" not in captured
+    assert "output_config" not in captured
 
 
 def test_structure_transcript_parses_tool_use_block(

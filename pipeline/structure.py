@@ -270,18 +270,16 @@ def structure_transcript(
     # 確実に埋まる。tool が呼ばれなかったケース(レアだが安全のため)は
     # 旧来の text 解析 → markdown_fallback 経路に落とす。
     #
-    # tool_choice は `{"type": "any"}` を使う。理由:
-    # - `{"type": "tool", "name": ...}` は Anthropic API 仕様により
-    #   `thinking` (extended thinking) と併用不可 (400 エラー)
-    # - tools 配列にツールが 1 個しか無い (`save_structured_memo`) ので、
-    #   `any` でも結果的にそのツールを必ず呼ぶ
-    # - `auto` だと Claude が Markdown で返す逃げ道が残るので不可
+    # 注意: Anthropic API は `tool_choice` で tool 呼び出しを強制する
+    # ("tool" 指定 / "any" の両方) と extended thinking との併用を許さない
+    # (400: "Thinking may not be enabled when tool_choice forces tool use.")。
+    # 構造化タスクは整形作業で thinking の効きが小さいため、JSON 必達を取って
+    # thinking は外す。`output_config={"effort": ...}` も thinking 連動の
+    # パラメータなので一緒に外す。
     tool_def = _structured_tool_schema()
     response = client.messages.create(
         model=cfg.anthropic_model,
         max_tokens=cfg.anthropic_max_tokens,
-        thinking={"type": "adaptive"},
-        output_config={"effort": cfg.anthropic_effort},
         system=[
             {
                 "type": "text",
@@ -291,7 +289,7 @@ def structure_transcript(
         ],
         messages=[{"role": "user", "content": user_content}],
         tools=[tool_def],
-        tool_choice={"type": "any"},
+        tool_choice={"type": "tool", "name": _STRUCTURED_TOOL_NAME},
     )
 
     structured: dict | None = None
