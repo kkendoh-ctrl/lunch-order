@@ -60,6 +60,11 @@ class Config:
     anthropic_effort: str
     structuring_prompt_path: Path | None
 
+    # Phase 4: PII マスキング。既存のテスト fixture を壊さないようデフォルト付き。
+    pii_mask_enabled: bool = True
+    pii_dict_path: Path | None = None
+    pii_allowlist_path: Path | None = None
+
     @classmethod
     def load(cls) -> "Config":
         vault = _get_path("VAULT_PATH")
@@ -68,6 +73,12 @@ class Config:
         structuring_prompt_rel = _get("STRUCTURING_PROMPT_PATH")
         structuring_prompt_path = (
             vault / structuring_prompt_rel if structuring_prompt_rel else None
+        )
+        pii_dict_raw = _get("PII_DICT_PATH")
+        pii_dict_path = Path(pii_dict_raw) if pii_dict_raw else None
+        pii_allowlist_raw = _get("PII_ALLOWLIST_PATH")
+        pii_allowlist_path = (
+            Path(pii_allowlist_raw) if pii_allowlist_raw else None
         )
         return cls(
             jpr_inbox=_get_path("JPR_INBOX_PATH"),
@@ -90,6 +101,9 @@ class Config:
             anthropic_max_tokens=_get_int("ANTHROPIC_MAX_TOKENS", 8192),
             anthropic_effort=_get("ANTHROPIC_EFFORT", "medium"),
             structuring_prompt_path=structuring_prompt_path,
+            pii_mask_enabled=_get_bool("PII_MASK_ENABLED", True),
+            pii_dict_path=pii_dict_path,
+            pii_allowlist_path=pii_allowlist_path,
         )
 
     def load_initial_prompt(self) -> str | None:

@@ -53,7 +53,8 @@ def _run_structuring(
         structure_msg = (
             f"structured(ctx={n_ctx}, in={usage.get('input_tokens', 0)}, "
             f"out={usage.get('output_tokens', 0)}, "
-            f"cache_read={usage.get('cache_read_input_tokens', 0)})"
+            f"cache_read={usage.get('cache_read_input_tokens', 0)}, "
+            f"masked={result.get('pii_masked', 0)})"
         )
     except Exception as e:
         traceback.print_exc()
@@ -150,6 +151,10 @@ def info() -> None:
     click.echo(f"STRUCTURING_PROMPT_PATH: {cfg.structuring_prompt_path}")
     if cfg.structuring_prompt_path:
         click.echo(f"  exists: {cfg.structuring_prompt_path.exists()}")
+    click.echo(f"PII_MASK_ENABLED: {cfg.pii_mask_enabled}")
+    click.echo(f"PII_DICT_PATH: {cfg.pii_dict_path}")
+    if cfg.pii_dict_path:
+        click.echo(f"  exists: {cfg.pii_dict_path.exists()}")
 
     files = watcher.iter_audio_files(cfg.jpr_inbox)
     click.echo(f"\n見つかった音声ファイル: {len(files)}")

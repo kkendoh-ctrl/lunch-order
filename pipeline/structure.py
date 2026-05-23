@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import pii
 from config import Config
 
 
@@ -122,7 +123,11 @@ def structure_transcript(
         system_prompt = _split_prompt(template)
 
     transcript = _enrich_transcript_meta(transcript, audio_path)
-    user_content = _format_transcript_for_user(transcript)
+
+    # Phase 4: Claude に送る直前にマスキング。vault に書く transcript は元のまま。
+    masker = pii.PIIMasker.from_config(cfg)
+    masked_transcript, mask_count = pii.mask_transcript(transcript, masker)
+    user_content = _format_transcript_for_user(masked_transcript)
 
     client = anthropic.Anthropic(api_key=cfg.anthropic_api_key)
     response = client.messages.create(
@@ -152,6 +157,7 @@ def structure_transcript(
         "structured": structured,
         "model": response.model,
         "structured_at": datetime.now(timezone.utc).isoformat(),
+        "pii_masked": mask_count,
         "usage": {
             "input_tokens": response.usage.input_tokens,
             "output_tokens": response.usage.output_tokens,
