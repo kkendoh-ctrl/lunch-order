@@ -356,11 +356,11 @@ def test_structure_transcript_forces_tool_choice(
     ):
         assert key in ctx_props, f"schema に {key} が無い"
 
-    # tool_choice で specific tool を強制
-    assert captured["tool_choice"] == {
-        "type": "tool",
-        "name": "save_structured_memo",
-    }
+    # tool_choice は any (thinking と併用可能)。tools 配列が 1 個なので
+    # 結果的に save_structured_memo を必ず呼ぶ。
+    assert captured["tool_choice"] == {"type": "any"}
+    # thinking も同居していることを確認 (案 A で消した場合の回帰防止)
+    assert captured["thinking"] == {"type": "adaptive"}
 
 
 def test_structure_transcript_parses_tool_use_block(

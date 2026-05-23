@@ -269,6 +269,13 @@ def structure_transcript(
     # 「品質低いから Markdown で返す」とサボれなくなり、frontmatter が
     # 確実に埋まる。tool が呼ばれなかったケース(レアだが安全のため)は
     # 旧来の text 解析 → markdown_fallback 経路に落とす。
+    #
+    # tool_choice は `{"type": "any"}` を使う。理由:
+    # - `{"type": "tool", "name": ...}` は Anthropic API 仕様により
+    #   `thinking` (extended thinking) と併用不可 (400 エラー)
+    # - tools 配列にツールが 1 個しか無い (`save_structured_memo`) ので、
+    #   `any` でも結果的にそのツールを必ず呼ぶ
+    # - `auto` だと Claude が Markdown で返す逃げ道が残るので不可
     tool_def = _structured_tool_schema()
     response = client.messages.create(
         model=cfg.anthropic_model,
@@ -284,7 +291,7 @@ def structure_transcript(
         ],
         messages=[{"role": "user", "content": user_content}],
         tools=[tool_def],
-        tool_choice={"type": "tool", "name": _STRUCTURED_TOOL_NAME},
+        tool_choice={"type": "any"},
     )
 
     structured: dict | None = None

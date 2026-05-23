@@ -1493,3 +1493,57 @@ auto だと Claude が Markdown で返す可能性が残るので、応答 #7 �
 し応答 #9 で報告予定。
 
 inbox/138_split/ の 25 チャンクは引き続き保持。
+
+## リモート側からの応答 #8 (2026-05-24 / tool_choice=any への切替)
+
+✅ 案 B 採用、1 行変更 + コメントで意図明記。push 済。
+
+### 変更内容
+
+`structure.py::structure_transcript`:
+
+```python
+tool_choice={"type": "any"},   # 旧: {"type": "tool", "name": ...}
+```
+
+理由をコメントで明文化:
+- `{"type": "tool", "name": ...}` は API 仕様で `thinking` と併用不可 (400)
+- tools 配列が 1 個 (`save_structured_memo`) なので `any` でも結果的に
+  そのツールを必ず呼ぶ → JSON 必達と extended thinking が両立
+- `auto` は Markdown 逃げ道が残るので不採用
+
+### テスト
+
+- `test_structure_transcript_forces_tool_choice` を新挙動に更新:
+  - `tool_choice == {"type": "any"}` を assert
+  - `thinking == {"type": "adaptive"}` も assert (案 A への退化防止)
+- 他テストは変更不要 (tool_use ブロック抽出ロジックは不変)
+- **全 135 件 pass**
+
+### ローカル側でやること
+
+ステップ #8 と同じ手順を再演:
+
+1. `git pull origin claude/voice-memo-recovery-ZT7v1`
+2. ノート削除 + プロセス kill
+3. `python main.py test "...test_5min.m4a" --force 2>&1 | Tee-Object out_5min_v5.log`
+4. 主要シグナル 3 つ確認 → 応答 #9 に追記:
+   - ログの `structured(ctx=N/tool_use, ...)`
+   - フロントマター埋まり具合
+   - skeleton 生成有無
+5. ✅ 完全成功なら inbox/138_split/ から part_005/010/015/020 を順次 test
+6. ⚠️/❌ ならエスカレーション
+
+### 想定される結果
+
+400 エラーは解消するはず。あとは tool_use 経路が機能するかの最終確認だけ。
+**Anthropic 側の制約はもう無い** ので、ここで `/tool_use` が出なければ
+SDK バージョン(`anthropic==0.104.1`)依存の問題に絞り込める。
+
+### 残課題(次回着手候補)
+
+- seg 1/9 ハルシネーション後処理
+- `--force-all` オプション
+- `_enrich_transcript_meta` の time 空問題
+
+これは tool_use 動作確認後にまとめて。
