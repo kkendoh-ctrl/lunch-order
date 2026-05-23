@@ -1107,3 +1107,137 @@ python main.py test "G:\マイドライブ\01.アイデア\音声メモログ\in
 2. `--force` で再実行 → Phase 2 を実走させて応答 #7 後半に追記
 3. JSON 化判定が ✅ なら 4 本 batch へ
 4. JSON も改善しなかったらリモートに `tool_use` 強制相談
+
+### 応答 #7 後半: Phase 2 再評価 (2026-05-24 00:17 / 削除→--force 再実行)
+
+#### 実行ログ要点
+
+```
+delete target: G:\マイドライブ\01.アイデア\音声メモログ\vault\録音\2026-05-23\test_5min.md
+deleted. confirm: False
+Start: 00:17:58
+処理中: G:\マイドライブ\01.アイデア\音声メモログ\inbox\test_5min.m4a
+結果: transcribed(300.0s, 11 segs) / structured(ctx=1/markdown_fallback, in=1643, out=1165, cache_read=0, masked=0) / aggregated(skeleton=0, daily=OK)
+End: 00:20:44
+```
+
+所要 2:46。v3 (Phase 1 のみ) 2:19 + Claude API ~27秒。
+
+#### 構造化フォーマット判定: ⚠️ markdown_fallback 残留
+
+- `structured(ctx=1/markdown_fallback, in=1643, out=1165, cache_read=0, masked=0)`
+- **`/markdown_fallback` まだ出る**。Claude は JSON ではなく Markdown で
+  返している
+- in=1643 (v2 の in=2253 から **610 減少** = ハルシネーション抑止で入力が
+  クリーン化)
+- out=1165 (v2 の out=713 から **452 増加** = Claude が抽出できる業務情報が
+  増えたため詳細出力)
+
+#### ノートの中身: ✅ 劇的改善
+
+v2 (markdown_fallback) と v3 (markdown_fallback) のノート比較:
+
+| 項目 | v2 ノート | v3 ノート |
+|---|---|---|
+| 概要 | 1 行のみ | 概要 + 主要トピック5項目 + 決定事項テーブル |
+| 主要トピック | 5 項目 (簡素) | **5 項目 + 「2.5ヶ月後にスタート」「ユニット10台先行投入」など具体記述** |
+| 関係者 | (なし) | **遠藤さん・ミズホさん・アイタックスさん明示** |
+| 決定事項 | (なし) | **4 行のテーブル形式 (開始時期/初期導入/交換方針/仕様書)** |
+| ToDo | 5 件 | 4 件 (具体性高い) |
+| 備考 | 1 行 | **ハルシネーション発生箇所 (時刻指定) を明記** |
+
+v3 のノートは **実用の議事録レベル**。「2.5ヶ月後スタート」「暫定機10台先行
+投入」「キャッシュレス対応機への順次交換」「ミズホ + アイタックス並行契約」
+など、業務上重要な意思決定が網羅されている。
+
+ハルシネーション抑止 (応答 #7 で確認) でクリーン化された transcript を
+Claude が消化することで、Markdown フォールバック経由でも実用上問題ない品質
+のノートが生成されることを実証。
+
+#### フロントマター残課題 (リモート #6 の HANDOFF メモと一致)
+
+```yaml
+date: ''        # 空
+time: ''        # 空
+counterpart: [] # 空
+topics: []      # 空
+locations: []   # 空
+```
+
+これは markdown_fallback 経由だと frontmatter 抽出ができない仕様による。
+**JSON 化を強制できれば全部埋まる** はず。
+
+#### 総合判定 (更新)
+
+| 観点 | 判定 | 詳細 |
+|---|---|---|
+| ハルシネーション | **⚠️ 一部改善 (大幅)** | 4 セグメントで業務情報新規認識、繰返総量 ~60% 削減。seg 1, 9 残留 |
+| JSON 構造化 | **⚠️ markdown_fallback 残留** | ただしノート内容は実用議事録レベル |
+| 速度 | **✅** | 2:46 (Phase 1 のみなら 2:19) |
+
+総合 ⚠️ + ⚠️ + ✅ → **4 本 batch テストは見送り、リモートにエスカレーション**
+
+### リモート側への追加お願い (応答 #7 確定版)
+
+#### 1. JSON 構造化を tool_use で強制してほしい (優先度: 中)
+
+- 現状 markdown_fallback 経由でもノート内容は実用議事録レベル
+- ただし frontmatter (`counterpart`, `topics`, `locations`, `date`, `time`)
+  が空のままなので、Vault 全体での集計・検索が機能しない
+- Anthropic SDK の `tools` パラメータで JSON Schema を強制すると、Claude が
+  必ず構造化キー付きで返してくれる
+
+実装案:
+```python
+response = client.messages.create(
+    model=cfg.anthropic_model,
+    tools=[{
+        "name": "save_structured_memo",
+        "description": "音声記憶の構造化結果を保存",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string"},
+                "topics": {"type": "array", "items": {"type": "string"}},
+                "counterpart": {"type": "array", "items": {"type": "string"}},
+                "locations": {"type": "array", "items": {"type": "string"}},
+                "domains": {"type": "array", "items": {"type": "string"}},
+                "importance": {"type": "integer", "minimum": 1, "maximum": 5},
+                "sentiment": {"type": "string"},
+                "todos": {"type": "array", "items": {"type": "string"}},
+                "decisions": {"type": "array", "items": {"type": "string"}},
+                "quality_warning": {"type": "string"},
+            },
+            "required": ["summary", "topics", "importance"]
+        }
+    }],
+    tool_choice={"type": "tool", "name": "save_structured_memo"},
+    ...
+)
+```
+
+#### 2. ハルシネーション seg 1 / 9 の追加対処 (優先度: 低)
+
+- **seg 9 「ご視聴ありがとうございました」**: ブラックリスト後処理が現実的。
+  segment 全文がこの定型に一致したら drop or `[ハルシネーション: YouTube系]`
+  に置換
+- **seg 1 / 8 の片仮名繰返 (ディアン/ビザ系)**: 圧縮率閾値をさらに
+  下げる (2.4 → 2.0)? 副作用テスト必要
+
+#### 3. (任意) ノート再生成時の挙動
+
+`--force` で transcript は再生成されるが note は protected の仕様は
+**直感的に正しい**(間違って force したら過去ノートが消えるのは怖い)。
+
+ただし運用上 「transcript 変わった → note も書き直したい」 ケースは
+頻発するので、**`--force-all` または `--force-note` オプション**が欲しい。
+
+### 次のアクション
+
+リモート側で tool_use 化 (案 1) の push を待つ。push されたら同じ
+`test_5min.m4a` を:
+1. ノート削除
+2. `--force` 再実行
+3. 応答 #8 で frontmatter 含めた完全な JSON ノートが生成できたか報告
+
+frontmatter が埋まれば 4 本 batch テストに進む。
