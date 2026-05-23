@@ -8,11 +8,23 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 import time
 import traceback
 from pathlib import Path
 
 import click
+
+# PowerShell の Tee-Object でログを取ると、Python のデフォルトのブロック
+# バッファリングのせいで進捗が長時間止まって見える。改行ごとに flush する
+# ことで `python main.py ... | Tee-Object out.log` でもリアルタイムに出る。
+# 環境変数 PYTHONUNBUFFERED=1 や `python -u` を要求するより、ここで明示する
+# 方が運用上事故が少ない(WhisperX/tqdm 等は stderr 側を使う)。
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+except AttributeError:
+    pass  # 古い Python(< 3.7)向けセーフガード。実運用上は通らない
 
 import aggregator
 import failure_tracker

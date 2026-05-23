@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import pii
-from config import Config
+from config import Config, canonical_date_folder
 
 
 _TRANSCRIPT_PLACEHOLDER = "{{TRANSCRIPT}}"
@@ -64,9 +64,12 @@ def _format_transcript_for_user(transcript: dict) -> str:
 
 def _enrich_transcript_meta(transcript: dict, audio_path: Path) -> dict:
     """transcript に date/time(audio ファイル名・ディレクトリ名由来)を補う。
-    既に入っていればそれを優先。"""
+    既に入っていればそれを優先。
+
+    date は canonical_date_folder() で決める(parent が非 canonical でも
+    metadata/mtime で日付を推定する)。"""
     if "date" not in transcript or "time" not in transcript:
-        date = audio_path.parent.name  # YYYY-MM-DD
+        date = canonical_date_folder(audio_path)
         # ファイル名: HH-MM-SS → HH:MM:SS
         stem = audio_path.stem
         if re.fullmatch(r"\d{2}-\d{2}-\d{2}", stem):

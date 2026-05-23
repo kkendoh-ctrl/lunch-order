@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -152,17 +154,80 @@ class Config:
         return bool(self.anthropic_api_key)
 
 
+_DATE_FOLDER_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _try_audio_metadata_date(audio_path: Path) -> str | None:
+    """MP4 ©day atom → "YYYY-MM-DD"。mutagen 無し or 取れなければ None。"""
+    try:
+        from mutagen.mp4 import MP4
+    except ImportError:
+        return None
+    try:
+        f = MP4(str(audio_path))
+        if not f.tags:
+            return None
+        raw = f.tags.get("\xa9day") or f.tags.get("\xa9DAY")
+        if not raw:
+            return None
+        s = str(raw[0]).strip()
+        for fmt in (
+            "%Y-%m-%dT%H:%M:%SZ",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%dT%H:%M",
+            "%Y-%m-%d",
+        ):
+            try:
+                return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
+            except ValueError:
+                continue
+    except Exception:
+        return None
+    return None
+
+
+def _try_mtime_date(audio_path: Path) -> str | None:
+    try:
+        return datetime.fromtimestamp(
+            audio_path.stat().st_mtime, tz=timezone.utc
+        ).strftime("%Y-%m-%d")
+    except OSError:
+        return None
+
+
+def canonical_date_folder(audio_path: Path) -> str:
+    """audio_path から日付フォルダ名 (YYYY-MM-DD or "_undated") を決める。
+
+    1. parent.name が YYYY-MM-DD パターンならそのまま使う(canonical layout)
+    2. 違う(例: `inbox/` 直下に手動で置かれた `録音 138.m4a`)なら
+       MP4 メタ → mtime → "_undated" の順でフォールバック
+
+    これで `vault/録音/inbox/録音 138.md` のような変なフォルダを防ぎ、
+    かつ既存の canonical な配置(YYYY-MM-DD/HH-MM-SS.m4a)は不変。"""
+    parent = audio_path.parent.name
+    if _DATE_FOLDER_RE.fullmatch(parent):
+        return parent
+    return (
+        _try_audio_metadata_date(audio_path)
+        or _try_mtime_date(audio_path)
+        or "_undated"
+    )
+
+
 def transcript_path_for(cfg: Config, audio_path: Path) -> Path:
     """audio: .../Just Press Record/2026-05-23/13-39-19.m4a
-       → .../音声記憶/_transcripts/2026-05-23/13-39-19.json"""
-    date_folder = audio_path.parent.name
+       → .../音声記憶/_transcripts/2026-05-23/13-39-19.json
+
+    parent が非 canonical ならば canonical_date_folder() で推定する。"""
+    date_folder = canonical_date_folder(audio_path)
     stem = audio_path.stem
     return cfg.transcripts_dir / date_folder / f"{stem}.json"
 
 
 def skipped_marker_path_for(cfg: Config, audio_path: Path) -> Path:
     """同上、ただし .skipped 拡張子"""
-    date_folder = audio_path.parent.name
+    date_folder = canonical_date_folder(audio_path)
     stem = audio_path.stem
     return cfg.transcripts_dir / date_folder / f"{stem}.skipped"
 
@@ -177,7 +242,7 @@ def is_already_processed(cfg: Config, audio_path: Path) -> bool:
 def note_path_for(cfg: Config, audio_path: Path) -> Path:
     """audio: .../Just Press Record/2026-05-23/13-39-19.m4a
        → .../音声記憶/録音/2026-05-23/13-39-19.md"""
-    date_folder = audio_path.parent.name
+    date_folder = canonical_date_folder(audio_path)
     stem = audio_path.stem
     return cfg.notes_dir / date_folder / f"{stem}.md"
 

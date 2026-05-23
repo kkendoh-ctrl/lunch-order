@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from config import Config
+from config import Config, canonical_date_folder
 
 
 _ERROR_KEYWORDS = (
@@ -41,7 +41,7 @@ class FailureRecord:
 
 def failure_marker_path(cfg: Config, audio_path: Path) -> Path:
     """audio_path → _failed/YYYY-MM-DD/HH-MM-SS.json"""
-    date_folder = audio_path.parent.name
+    date_folder = canonical_date_folder(audio_path)
     stem = audio_path.stem
     return cfg.failed_dir / date_folder / f"{stem}.json"
 

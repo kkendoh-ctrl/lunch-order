@@ -21,7 +21,7 @@ from typing import Any
 import yaml
 
 import reminders
-from config import Config
+from config import Config, canonical_date_folder
 
 
 _SKELETON_MARKER = "<!-- auto-skeleton -->"
@@ -592,7 +592,7 @@ def aggregate_after_note(
 
     返り値はログ用のサマリ。"""
     skeletons = ensure_entity_skeletons(structured or {}, cfg)
-    date = audio_path.parent.name  # YYYY-MM-DD
+    date = canonical_date_folder(audio_path)
     daily = regenerate_daily_note(date, cfg)
     indexes = regenerate_index_notes(cfg)
     return {

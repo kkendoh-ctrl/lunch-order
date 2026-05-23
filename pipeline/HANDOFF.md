@@ -380,3 +380,92 @@ model: claude-opus-4-7
 ## ローカル側からの応答 #3 (2026-05-23 / 録音 138 長尺テスト)
 
 実行中、結果は完了後追記。
+
+## リモート側からの応答 #4 (2026-05-23 / canonical 化 + buffering 対処)
+
+ローカル側が予告していた 3 つの改善のうち、コード側で対処可能な
+2 つを実装 & push 済。
+
+### 1. 録音 138 が `inbox/録音 138.md` に行く問題(canonical 化)
+
+**原因**: `config.py::note_path_for` 等が `audio_path.parent.name` を
+そのまま日付フォルダ名にしていた。`inbox/` 直下に手で置かれた
+`録音 138.m4a` の場合、parent が "inbox" になり
+`vault/録音/inbox/録音 138.md` ができていた。
+
+**修正**: `config.py` に `canonical_date_folder(audio_path)` ヘルパー追加。
+
+- parent.name が `YYYY-MM-DD` パターンならそのまま使う(既存挙動を変えない)
+- そうでなければ MP4 メタデータ(©day) → ファイル mtime → `_undated`
+  の順でフォールバック
+
+これで `inbox/録音 138.m4a` は mtime を見て
+`vault/録音/2026-05-23/録音 138.md`(録音日に応じて)に行く。
+
+ヘルパーを使うようにした箇所:
+- `config.py`: `transcript_path_for` / `skipped_marker_path_for` / `note_path_for`
+- `failure_tracker.py`: `failure_marker_path`
+- `structure.py`: `_enrich_transcript_meta` (ノート frontmatter の date)
+- `aggregator.py`: `aggregate_after_note` (日次ノート再生成のキー日付)
+
+### 2. Tee-Object のバッファリング問題
+
+**原因**: Python のデフォルト stdout がブロックバッファリング。
+PowerShell の `Tee-Object` は読んだ分だけ出すので、Python 側が
+バッファを flush しないと進捗が長時間止まって見える。
+
+**修正**: `main.py` の冒頭で `sys.stdout.reconfigure(line_buffering=True)`
+と stderr も同様にする。改行ごとに flush するので
+`python main.py test ... | Tee-Object out.log` でもリアルタイム表示。
+
+`PYTHONUNBUFFERED=1` や `python -u` を要求するより、コード側で
+明示する方が運用事故が少ない。
+
+### 3. 30 秒成功ログ
+
+これはコード変更不要 (このファイルに既に保存済の `transcribed(30.0s, 1 segs)
+/ structured(ctx=0, in=186, out=153, cache_read=0, masked=0) / aggregated(skeleton=0,
+daily=OK)` がそれ)。
+
+### テスト
+
+- 新規 `tests/test_canonical_paths.py` 9 件(canonical pass-through / mtime
+  fallback / metadata 優先 / undated fallback / 各 path 関数の inbox 直下挙動)
+- 既存テスト変更なし(全て canonical layout 前提だった)
+- **全 120 件 pass**
+
+### 既存ファイルへの影響(要確認)
+
+旧コードで作られた `vault/録音/inbox/test_30sec.md` などは
+「孤児」になる(新コードでは別の日付フォルダを探しに行く)。
+影響軽微なので、ローカル側で手動で:
+
+```powershell
+# 確認
+Get-ChildItem "G:\マイドライブ\01.アイデア\音声メモログ\vault\録音\inbox\" -Recurse
+Get-ChildItem "G:\マイドライブ\01.アイデア\音声メモログ\vault\_transcripts\inbox\" -Recurse
+
+# 不要なら丸ごと削除
+Remove-Item "G:\マイドライブ\01.アイデア\音声メモログ\vault\録音\inbox\" -Recurse
+Remove-Item "G:\マイドライブ\01.アイデア\音声メモログ\vault\_transcripts\inbox\" -Recurse
+```
+
+長尺テストが既に走り終わって `inbox/録音 138.md` ができていたら、
+そのまま残しても害は無いが、pull 後に `--force` で再処理すれば
+canonical な場所に新しく書かれる。
+
+### ローカル側でやること
+
+1. `git pull origin claude/voice-memo-recovery-ZT7v1`
+2. (任意)既存 `inbox/` 配下の孤児ノート/transcript 削除
+3. テスト走らせる時は `Tee-Object` 込みでも進捗バーが見えるはず
+
+### 次に予想される罠
+
+ここから先で気になっているの:
+- 長尺 138 の Phase 2 (Claude 構造化): 文字起こしテキストが 10K トークン
+  超えるとプロンプトが膨大になる。Claude 4.7 の context window は
+  余裕あるが、`anthropic_max_tokens=8192` (出力上限) の枠で構造化結果が
+  truncate される可能性。エラーになったら出力トークン数を見て判断
+- silero でも長尺で詰まる場合: VAD を完全スキップする
+  `vad_filter=False` 相当のオプション追加を検討
