@@ -134,7 +134,90 @@
 
 ## ローカル側からの次のアクション
 
-1. `.env` の `WHISPER_MODEL` を `large-v3-turbo` に書き換え (ユーザー承認待ち)
-2. Google Drive オフライン化 (ユーザー手動)
-3. `python main.py test ...` 実行 → 初回モデル DL 〜 Phase 1-5 通し
-4. 結果をこのファイルに追記して push
+1. ✅ `.env` の `WHISPER_MODEL` を `large-v3-turbo` に書き換え (承認済)
+2. ✅ Google Drive オフライン化 (ユーザー設定済)
+3. ✅ `python main.py test ...` 実行 → **失敗 (transcribe_error)**
+4. ⏳ リモート側にエスカレーション中
+
+## 初回テスト実行結果 (2026-05-23 19:30 頃)
+
+**コマンド**: `python main.py test "G:\マイドライブ\01.アイデア\音声メモログ\inbox\録音 138.m4a"`
+
+### ✅ 成功した部分
+- WhisperX turbo モデル DL 成功 (`models--mobiuslabsgmbh--faster-whisper-large-v3-turbo` を HF キャッシュに取得)
+- 音声デコード成功
+- VAD (Pyannote) 実行成功
+
+### ❌ 失敗箇所
+
+```
+処理中: G:\マイドライブ\01.アイデア\音声メモログ\inbox\録音 138.m4a
+...
+2026-05-23 19:30:59 - whisperx.vads.pyannote - INFO - Performing voice activity detection using Pyannote...
+Traceback (most recent call last):
+  File "C:\Users\monum\projects\lunch-order\pipeline\main.py", line 124, in _process_one_inner
+    result = tx.transcribe(audio_path, cfg)
+  File "C:\Users\monum\projects\lunch-order\pipeline\transcribe.py", line 87, in transcribe
+    result = model.transcribe(audio, **transcribe_kwargs)
+TypeError: FasterWhisperPipeline.transcribe() got an unexpected keyword argument 'initial_prompt'
+結果: transcribe_error: FasterWhisperPipeline.transcribe() got an unexpected keyword argument 'initial_prompt'
+```
+
+### 原因分析
+
+**WhisperX 3.x の API 変更**。`initial_prompt` は `model.transcribe()` の引数から外され、`whisperx.load_model(..., asr_options={"initial_prompt": "..."})` 経由で渡す形式に変わった。
+
+該当箇所: `pipeline/transcribe.py:87` (`transcribe_kwargs["initial_prompt"]` を渡している)
+
+### リモート側へ修正提案
+
+`transcribe.py` の `_load_model` で `asr_options={"initial_prompt": cfg.load_initial_prompt()}` を渡し、`transcribe()` 呼び出し側からは `initial_prompt` を外す。具体例:
+
+```python
+def _load_model(cfg: Config):
+    import whisperx
+    key = f"{cfg.whisper_model}:{cfg.whisper_device}:{cfg.whisper_compute_type}"
+    if key not in _model_cache:
+        asr_options = {}
+        prompt = cfg.load_initial_prompt()
+        if prompt:
+            asr_options["initial_prompt"] = prompt
+        _model_cache[key] = whisperx.load_model(
+            cfg.whisper_model,
+            device=cfg.whisper_device,
+            compute_type=cfg.whisper_compute_type,
+            language=cfg.whisper_language,
+            asr_options=asr_options or None,
+        )
+    return _model_cache[key]
+
+
+def transcribe(audio_path: Path, cfg: Config) -> dict:
+    import whisperx
+    model = _load_model(cfg)
+    audio = whisperx.load_audio(str(audio_path))
+    result = model.transcribe(audio)  # initial_prompt は load 時に注入済
+    ...
+```
+
+ただしモデルキャッシュキーに prompt が入っていないので、prompt 変更時にキャッシュ再生成しないバグの種になる。キーに hash 入れるか、テスト時はプロセス再起動前提とするか要判断。
+
+### 副次的な警告 (致命的ではない / 参考)
+
+1. `torchcodec is not installed correctly` — `libtorchcodec_core[4-7].dll` が見つからない警告。WhisperX 経路では使われていない (pyannote.audio が optional に試みただけ) ので無視可
+2. `huggingface_hub cache-system uses symlinks` — Windows で開発者モード未有効 or 非管理者実行のため。ディスク使用が少し増えるだけ、致命的ではない
+3. `Lightning automatically upgraded your loaded checkpoint from v1.5.4 to v2.6.4` — pyannote モデルが古い形式、自動アップグレードされたので問題なし
+
+### 環境情報 (修正検証用)
+
+- `whisperx==3.8.5` (requirements.txt の `whisperx>=3.1.5` で解決された最新)
+- `faster-whisper==1.2.1`
+- `ctranslate2==4.7.2`
+- `torch==2.8.0` (CPU)
+- `pyannote-audio==4.0.4`
+
+## ローカル側からの次のアクション (更新)
+
+- リモート側で `transcribe.py` 修正 & push を待つ
+- 修正後、再度 `git pull` してテスト再実行
+- HF キャッシュは保持されるので、2回目はモデル DL なしで即走る (時間短縮)
