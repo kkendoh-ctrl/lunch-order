@@ -42,6 +42,63 @@ def test_extract_json_raises_on_garbage() -> None:
         structure._extract_json("これは JSON ではない普通の文章です")
 
 
+# -------------------- _markdown_to_fallback_structured --------------------
+
+
+def test_markdown_fallback_extracts_h1_title() -> None:
+    md = (
+        "# 構造化メモ: test_5min\n"
+        "## ⚠️ 文字起こし品質に関する注意\n"
+        "本録音は ASR 品質が低い。\n"
+    )
+    result = structure._markdown_to_fallback_structured(md)
+    ctxs = result["contexts"]
+    assert len(ctxs) == 1
+    assert ctxs[0]["title"] == "構造化メモ: test_5min"
+
+
+def test_markdown_fallback_default_title_when_no_h1() -> None:
+    md = "## 要旨\n本文だけ。\n"
+    result = structure._markdown_to_fallback_structured(md)
+    assert result["contexts"][0]["title"].startswith("構造化失敗")
+
+
+def test_markdown_fallback_preserves_original_in_summary() -> None:
+    md = "# Title\n\n## セクション\n中身。"
+    result = structure._markdown_to_fallback_structured(md)
+    summary = result["contexts"][0]["summary"]
+    assert "中身。" in summary
+    assert "手動レビュー" in summary  # 警告メッセージが先頭
+
+
+def test_markdown_fallback_truncates_long_input() -> None:
+    md = "# Title\n\n" + ("あ" * 5000)
+    result = structure._markdown_to_fallback_structured(md)
+    summary = result["contexts"][0]["summary"]
+    # 4000 で切れ + 警告メッセージ分は超えるが原文部分は ~4000 で truncate
+    assert "以下省略" in summary
+
+
+def test_markdown_fallback_marks_with_review_domain() -> None:
+    md = "# x"
+    result = structure._markdown_to_fallback_structured(md)
+    ctx = result["contexts"][0]
+    assert ctx["domains"] == ["要レビュー"]
+    assert ctx["importance"] == 2
+    # note_writer が期待するキーは全部存在
+    for key in (
+        "counterpart",
+        "topics",
+        "locations",
+        "todos",
+        "key_points",
+        "open_questions",
+        "summary",
+        "sentiment",
+    ):
+        assert key in ctx
+
+
 def test_split_prompt_extracts_fence_content() -> None:
     template = """# Header
 

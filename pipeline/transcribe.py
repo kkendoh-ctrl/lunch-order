@@ -30,9 +30,16 @@ def _load_model(cfg: Config):
             "language": cfg.whisper_language,
             "vad_method": cfg.whisper_vad_method,
         }
+        # asr_options: ハルシネーション抑止 (condition_on_previous_text=False)
+        # と initial_prompt を必要に応じて流し込む。空 dict なら渡さない。
+        asr_options: dict = {}
+        if not cfg.whisper_condition_on_previous_text:
+            asr_options["condition_on_previous_text"] = False
         prompt = cfg.load_initial_prompt()
         if prompt:
-            kwargs["asr_options"] = {"initial_prompt": prompt}
+            asr_options["initial_prompt"] = prompt
+        if asr_options:
+            kwargs["asr_options"] = asr_options
         _model_cache[key] = whisperx.load_model(cfg.whisper_model, **kwargs)
     return _model_cache[key]
 

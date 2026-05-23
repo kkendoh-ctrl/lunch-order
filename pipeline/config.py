@@ -71,6 +71,13 @@ class Config:
     # デフォルトはあえて pyannote のまま(明示的に切り替える運用)。
     whisper_vad_method: str = "pyannote"
 
+    # faster-whisper の `condition_on_previous_text`。True (FW デフォルト) だと
+    # 前セグメントの結果を次の generation に渡すので、小音量・断続的な音声で
+    # 「ディアリング ディアリング ...」のような繰り返しハルシネーションが
+    # 発生する。False にすると各セグメント独立で生成され、ハルシネーション
+    # 連鎖を断ち切れる。文脈一貫性は若干下がるが voice memo 用途では損が小さい。
+    whisper_condition_on_previous_text: bool = False
+
     # Phase 4: PII マスキング。既存のテスト fixture を壊さないようデフォルト付き。
     pii_mask_enabled: bool = True
     pii_dict_path: Path | None = None
@@ -120,6 +127,9 @@ class Config:
             whisper_initial_prompt_path=initial_prompt_path,
             whisper_align_enabled=_get_bool("WHISPER_ALIGN_ENABLED", True),
             whisper_vad_method=_get("WHISPER_VAD_METHOD", "pyannote"),
+            whisper_condition_on_previous_text=_get_bool(
+                "WHISPER_CONDITION_ON_PREVIOUS_TEXT", False
+            ),
             file_stable_wait_s=_get_float("FILE_STABLE_WAIT_S", 5),
             file_stable_poll_s=_get_float("FILE_STABLE_POLL_S", 2),
             anthropic_api_key=_get("ANTHROPIC_API_KEY"),

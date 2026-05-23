@@ -600,3 +600,106 @@ Claude が **Markdown 形式** でレスポンスを返している。`# 構造�
 
 修正 push してもらえれば再テストします。inbox/138_split/ の 25 チャンクは
 残してあるので、修正後に複数チャンクで一気に検証できます。
+
+## リモート側からの応答 #5 (2026-05-23 / ハルシネーション + JSON 寛容化)
+
+✅ 優先度高の 2 件、実装 & push 済。3 件目(Phase 1 自動検知)は影響範囲が
+大きく、まず 1+2 の効果を見てから判断したいので保留。
+
+### 1. Whisper ハルシネーション対策
+
+**`condition_on_previous_text=False` をデフォルト化**:
+
+- `config.py` に `whisper_condition_on_previous_text: bool = False`
+  フィールドを追加(クラス側のデフォルトを False に固定)
+- `.env` で `WHISPER_CONDITION_ON_PREVIOUS_TEXT=true` を指定すれば
+  旧挙動(FW デフォルト True)に戻せる
+- `transcribe.py::_load_model`: `asr_options` に常に
+  `{"condition_on_previous_text": False}` を入れる(prompt がある場合は
+  initial_prompt も同居)
+- `.env.example` に該当セクション追加
+
+他のオプション(`no_speech_threshold` / `log_prob_threshold` /
+`compression_ratio_threshold`)は faster-whisper のデフォルト値
+(0.6 / -1.0 / 2.4)と同じなので今回は触らず。効果不足なら次フェーズで
+温度フォールバック(`temperatures=[0.0, 0.2, ...]`)を入れる方針。
+
+### 2. Phase 2 JSON 抽出の寛容化(Markdown フォールバック)
+
+**`structure._markdown_to_fallback_structured()` 追加**:
+
+- `_extract_json` は **そのまま** raise する挙動を維持(garbage 入力検知用)
+- `structure_transcript` 側で `ValueError` を catch → Markdown 応答を
+  1 つの `context` として詰めるフォールバックを呼ぶ:
+  ```python
+  {
+      "title": "<H1 から抽出>",
+      "importance": 2,
+      "domains": ["要レビュー"],
+      "summary": "⚠️ Claude が JSON を返さなかったため Markdown 応答を格納...\n\n<元の Markdown 全文>",
+      "key_points": [],
+      "open_questions": ["構造化失敗の原因は録音品質か Claude の挙動か"],
+      "counterpart": [], "topics": [], "locations": [], "todos": [],
+  }
+  ```
+- `structuring_format` フィールドを result に追加(`"json"` or `"markdown_fallback"`)
+- `main.py` のステータス出力に `/markdown_fallback` タグを付ける:
+  ```
+  結果: transcribed(300.0s, 11 segs) / structured(ctx=1/markdown_fallback, in=..., out=..., ...) / aggregated(skeleton=0, daily=OK)
+  ```
+
+これで `## 要レビュー` ドメインタグから一覧で拾えるし、
+note_writer 側は何も変更不要(summary がそのまま出る)。
+
+### テスト
+
+- `tests/test_structure.py` に Markdown フォールバック 5 ケース追加
+- `tests/test_transcribe.py` に condition_on_previous_text の挙動 4 ケース
+  追加 / 既存テスト更新(常に `asr_options` が渡る前提に)
+- **全 126 件 pass**
+
+### ローカル側でやること
+
+1. `git pull origin claude/voice-memo-recovery-ZT7v1`
+2. `.env` に明示的に追記したければ:
+   ```
+   WHISPER_CONDITION_ON_PREVIOUS_TEXT=false
+   ```
+   (省略してもパイプライン側で False がデフォルト)
+3. プロセスが残ってたら `Stop-Process -Name python -Force`
+   (asr_options を載せ替えるため model キャッシュも作り直し)
+4. **test_5min.m4a で再テスト** が一番影響を見やすい:
+   ```powershell
+   python main.py test "G:\マイドライブ\01.アイデア\音声メモログ\inbox\test_5min.m4a" --force
+   ```
+   期待:
+   - seg 1〜3 の「ディアリング ディアリング ...」が消える(または激減)
+   - Phase 2 が JSON でちゃんと返ってくる(品質改善で Claude が観念する)
+   - もし Claude がまた Markdown で返してきたら
+     `structured(ctx=1/markdown_fallback, ...)` のログが出て、ノートには
+     `domains: [要レビュー]` のフロントマターが付く
+5. **動いたら inbox/138_split/ の複数チャンクで一気にバッチ**:
+   ```powershell
+   # まず inbox 直下じゃなく日付フォルダに移すか、test で個別実行
+   python main.py test "G:\...\inbox\138_split\part_015.m4a" --force
+   ```
+
+### 残懸念
+
+- `inbox/138_split/part_*.m4a` も `inbox/` 直下扱いだから canonical_date_folder
+  経由で mtime ベースの日付フォルダに行く。同じ録音の 25 パートが
+  全部同じ mtime 日付に並ぶので、ノートは時刻違いで区別できるはず
+  (part_000.md / part_001.md ... と stem ベースで一意)
+- もし「録音 138 全体を 1 ノートにまとめたい」場合は、結合後に
+  `import` で正規 layout に入れるのが筋
+
+### 次に予想される罠
+
+- **Claude が "contexts": [] を返す**(雑談判定): test_5min は 5 分の
+  業務会話なので contexts=0 にはならないはず。でももしなったら
+  プロンプトの「雑談判定」基準が厳しすぎるサインなので
+  `claude-structuring.md` 側を修正
+- **5 分文字起こしで Phase 2 入力が大きい**: 30 秒で in=186 だったので、
+  5 分なら 1500 トークン目安。`anthropic_max_tokens=8192` 内に余裕で収まる
+- **part 同士の Phase 3 集約**: 25 個のノートが同じ日次に集まると
+  `日次/YYYY-MM-DD.md` がやや長くなるが、表示順は時刻昇順なので問題なし

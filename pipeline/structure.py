@@ -82,7 +82,10 @@ def _enrich_transcript_meta(transcript: dict, audio_path: Path) -> dict:
 
 def _extract_json(text: str) -> dict:
     """Claude のレスポンスから JSON を取り出す。
-    ```json ... ``` フェンスや前置きが付いていても拾う。"""
+    ```json ... ``` フェンスや前置きが付いていても拾う。
+
+    JSON が一切取れない場合は ValueError。呼び出し側で
+    `_markdown_to_fallback_structured` にフォールバックする運用。"""
     text = text.strip()
     # まず素直にパースを試す
     try:
@@ -105,6 +108,47 @@ def _extract_json(text: str) -> dict:
         except json.JSONDecodeError:
             pass
     raise ValueError(f"Claude の応答から JSON を抽出できませんでした: {text[:200]}...")
+
+
+def _markdown_to_fallback_structured(text: str) -> dict:
+    """JSON 抽出失敗時のセーフネット。Markdown 応答を1つの context に詰める。
+
+    低品質な文字起こしを見た Claude が「これは構造化に値しない」と判断して
+    人間向けの Markdown レポートを返した場合などに使う。録音内容を完全に
+    失うよりは、生の Markdown を summary に格納して importance=2 の context
+    を 1 つ作り、ノート生成を続行する。`domains=["要レビュー"]` を付けて
+    あとから一覧でフィルタできるようにする。"""
+    cleaned = text.strip()
+    # H1 タイトル抽出(無ければ汎用タイトル)
+    title_m = re.match(r"^#\s+(.+?)\s*$", cleaned, flags=re.MULTILINE)
+    title = title_m.group(1).strip() if title_m else "構造化失敗(Markdown フォールバック)"
+    # 長すぎる場合は summary を切り詰める(Obsidian 上の見やすさ優先)
+    body = cleaned
+    if len(body) > 4000:
+        body = body[:4000] + "\n\n...(以下省略、原文は transcript JSON 参照)"
+    return {
+        "contexts": [
+            {
+                "title": title,
+                "importance": 2,
+                "sentiment": "ニュートラル",
+                "domains": ["要レビュー"],
+                "summary": (
+                    "⚠️ Claude が JSON 形式で構造化を返さなかったため、"
+                    "Markdown 応答をそのまま格納しています。手動レビュー推奨。\n\n"
+                    f"{body}"
+                ),
+                "key_points": [],
+                "open_questions": [
+                    "構造化失敗の原因は録音品質か Claude の挙動か(transcript を確認)",
+                ],
+                "counterpart": [],
+                "topics": [],
+                "locations": [],
+                "todos": [],
+            }
+        ],
+    }
 
 
 def structure_transcript(
@@ -154,10 +198,19 @@ def structure_transcript(
             f"Claude が text ブロックを返さなかった: stop_reason={response.stop_reason}"
         )
     raw = "\n".join(text_parts)
-    structured = _extract_json(raw)
+    try:
+        structured = _extract_json(raw)
+        structuring_format = "json"
+    except ValueError:
+        # JSON 抽出失敗。Markdown レスポンスを 1 つの context にまとめて続行。
+        # 例外を投げて Phase 2 全体を落とすより、低品質結果でも note を作って
+        # 人間にレビューさせる方が運用上ロスが少ない。
+        structured = _markdown_to_fallback_structured(raw)
+        structuring_format = "markdown_fallback"
 
     return {
         "structured": structured,
+        "structuring_format": structuring_format,
         "model": response.model,
         "structured_at": datetime.now(timezone.utc).isoformat(),
         "pii_masked": mask_count,

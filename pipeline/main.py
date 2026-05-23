@@ -65,8 +65,13 @@ def _run_structuring(
         note_writer.save_note(body, out)
         n_ctx = len(result.get("structured", {}).get("contexts", []) or [])
         usage = result.get("usage", {})
+        fmt_tag = (
+            "/markdown_fallback"
+            if result.get("structuring_format") == "markdown_fallback"
+            else ""
+        )
         structure_msg = (
-            f"structured(ctx={n_ctx}, in={usage.get('input_tokens', 0)}, "
+            f"structured(ctx={n_ctx}{fmt_tag}, in={usage.get('input_tokens', 0)}, "
             f"out={usage.get('output_tokens', 0)}, "
             f"cache_read={usage.get('cache_read_input_tokens', 0)}, "
             f"masked={result.get('pii_masked', 0)})"
