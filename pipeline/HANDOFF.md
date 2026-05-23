@@ -2838,3 +2838,99 @@ structured_at: '2026-05-23T17:41:17.378338+00:00'
 - batch 処理は時間かかるので最後
 
 リモート側で判断 & push を待ちます。
+
+## リモート側からの応答 #14 (2026-05-24 / 残課題 #2: `--force-all` オプション)
+
+✅ ローカル提案順序(#2 → #5 → batch)を受諾、#2 から実装 & push 済。
+
+### 何を変えたか
+
+`--force` の挙動(Phase 1 のみ再実行、既存ノート保護)はそのまま維持し、
+新規 `--force-all` フラグを 3 コマンド(`test` / `batch` / `retry`)に追加。
+
+#### CLI
+
+```
+test [AUDIO] [--force] [--force-all]
+batch        [--force] [--force-all]
+retry [AUDIO] [--force-all]
+```
+
+`--force-all` は `--force` を内包(Phase 1 再実行 + Phase 2 ノート上書き)。
+1 フラグで済むので「ノート消して --force 再実行」の手動 Remove-Item 不要。
+
+#### 内部
+
+- `_run_structuring(transcript, audio_path, cfg, force_note=False)` に
+  `force_note` 引数追加。`is_structured` チェックを `not force_note and is_structured(...)` に変更
+- `_process_one` / `_process_one_inner` に `force_note` パラメータを plumb
+- `_process_one_inner` の Phase 1 既完了 + Phase 2 まだ分岐に `force_note` 条件を追加
+  (force_note=True なら既存ノートあっても Phase 2 を強制再実行)
+
+### 使い分けガイド
+
+| 場面 | フラグ |
+|---|---|
+| 文字起こし結果が古い、新版モデル/設定で再実行したい | `--force` |
+| プロンプト/構造化設定を変えてノートを書き直したい | `--force-all` |
+| ハルシネーション抑止スタックを変えて全段やり直し | `--force-all` |
+| 開発・チューニングで loop 回したい | `--force-all` |
+| 通常運用(失敗マーカーからの再試行) | (フラグなし) or `retry` |
+
+### テスト
+
+新規 `tests/test_main.py` (7 件):
+- `_run_structuring` の force_note 挙動 (skip vs overwrite)
+- 各コマンドの --force-all ヘルプ存在
+- `--force-all` で _process_one に `force=True, force_note=True` 渡る
+- `--force` だけなら `force=True, force_note=False`(既存ノート保護)
+
+**全 187 件 pass**。
+
+### ローカル側でやること
+
+1. `git pull origin claude/voice-memo-recovery-ZT7v1`
+2. `test_5min.m4a --force-all` で動作確認(Remove-Item 不要):
+   ```powershell
+   Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force
+   python main.py test "G:\マイドライブ\01.アイデア\音声メモログ\inbox\test_5min.m4a" --force-all 2>&1 | Tee-Object out_5min_v8.log
+   ```
+3. 応答 #15 で:
+   - ノートが事前削除なしで上書きされたか(タイムスタンプ変化)
+   - 構造化結果に差分があるか(無くて当然、Claude の出力揺れによる)
+   - 残課題 #4 の名寄せ効果が維持されているか(skeleton 数)
+
+### 残課題の進行状況 (全部完了)
+
+- [x] **#1 ハルシネーション後処理** (✅ 完了)
+- [x] **#3 time 値改善** (✅ 完了)
+- [x] **#4 skeleton 名寄せ** (✅ 完了)
+- [x] **#2 `--force-all` オプション** (✅ 今回完了)
+
+**当初の残課題 1〜4 すべて完了。**
+
+### 次の選択肢
+
+応答 #14 でローカルが提案した順序の続き:
+
+- **#5 既存重複 skeleton cleanup**: vault/人物/ の重複ペア (6 組) を
+  one-off スクリプトで merge。手動 alias テーブル形式が安全
+- **138_split 全パート batch**: パイプライン実運用検証。touch 運用で
+  time 補正してから
+
+私のおすすめは **#5 → batch** の順(ローカル #14 の提案そのまま)。
+理由は変わらず、名寄せ済 vault で batch する方が後の手戻り少ない。
+
+#5 の設計案:
+- 新規 `pipeline/skeleton_merge.py` の CLI コマンド
+- 入力: YAML/JSON 形式の alias テーブル (`alias.yaml` 例:
+  `アイテックス: アイタックス` で「アイテックス を アイタックス に統合」)
+- 動作:
+  1. 統合元 skeleton ファイルから本文(手書き内容)を統合先にマージ
+  2. vault/録音/**/*.md の wikilink を全部書き換え(`[[アイテックス]]` →
+     `[[アイタックス]]`)
+  3. 統合元 skeleton 削除
+  4. dry-run モード必須(`--dry-run` で書き換え対象だけ表示)
+- 集約系(日次/一覧)は次の aggregate コマンドで再生成
+
+進めて良ければそのまま #5 着手します。STOP / 別案あれば指示ください。

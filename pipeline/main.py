@@ -46,12 +46,14 @@ from config import (
 
 
 def _run_structuring(
-    transcript: dict, audio_path: Path, cfg: Config
+    transcript: dict, audio_path: Path, cfg: Config, force_note: bool = False
 ) -> str:
-    """transcript dict → Claude → Vault にノート生成。ステータス文字列を返す。"""
+    """transcript dict → Claude → Vault にノート生成。ステータス文字列を返す。
+
+    force_note=True で既存ノートがあっても上書き再生成する(--force-all 経由)。"""
     if not cfg.structuring_enabled:
         return "structure_skipped(ANTHROPIC_API_KEY未設定)"
-    if is_structured(cfg, audio_path):
+    if not force_note and is_structured(cfg, audio_path):
         return "structure_already_done"
 
     try:
@@ -109,9 +111,13 @@ def _run_structuring(
     return f"{structure_msg} / {agg_msg}"
 
 
-def _process_one(audio_path: Path, cfg: Config, force: bool = False) -> str:
+def _process_one(
+    audio_path: Path, cfg: Config, force: bool = False, force_note: bool = False
+) -> str:
     """1ファイルを処理して、status string を返す。失敗マーカーの管理も。"""
-    status = _process_one_inner(audio_path, cfg, force=force)
+    status = _process_one_inner(
+        audio_path, cfg, force=force, force_note=force_note
+    )
     if failure_tracker.status_indicates_failure(status):
         phase = failure_tracker.classify_phase(status)
         failure_tracker.record_failure(cfg, audio_path, phase, status)
@@ -121,15 +127,21 @@ def _process_one(audio_path: Path, cfg: Config, force: bool = False) -> str:
     return status
 
 
-def _process_one_inner(audio_path: Path, cfg: Config, force: bool = False) -> str:
+def _process_one_inner(
+    audio_path: Path, cfg: Config, force: bool = False, force_note: bool = False
+) -> str:
     """1ファイルを処理(filter → WhisperX → Claude → ノート → 集約)。
-    返り値はステータス文字列(ログ用)。"""
+    返り値はステータス文字列(ログ用)。
+
+    force: Phase 1 (WhisperX 文字起こし) を再実行
+    force_note: 既存ノートを上書き再生成 (Phase 2 を強制再実行)。
+                通常は --force-all 経由で True/True 同時セット。"""
     if not force and is_already_processed(cfg, audio_path):
-        # Phase 1 は終わっているが Phase 2 がまだなら走らせる
+        # Phase 1 は終わっているが Phase 2 がまだ(or force_note)なら走らせる
         if (
             cfg.structuring_enabled
             and transcript_path_for(cfg, audio_path).exists()
-            and not is_structured(cfg, audio_path)
+            and (force_note or not is_structured(cfg, audio_path))
         ):
             try:
                 transcript = json.loads(
@@ -137,7 +149,9 @@ def _process_one_inner(audio_path: Path, cfg: Config, force: bool = False) -> st
                 )
             except Exception as e:
                 return f"transcript_read_error: {e}"
-            return _run_structuring(transcript, audio_path, cfg)
+            return _run_structuring(
+                transcript, audio_path, cfg, force_note=force_note
+            )
         return "already_processed"
 
     try:
@@ -163,7 +177,9 @@ def _process_one_inner(audio_path: Path, cfg: Config, force: bool = False) -> st
         traceback.print_exc()
         return f"transcribe_error: {e}"
 
-    structure_status = _run_structuring(result, audio_path, cfg)
+    structure_status = _run_structuring(
+        result, audio_path, cfg, force_note=force_note
+    )
     return f"{transcribe_status} / {structure_status}"
 
 
@@ -233,22 +249,36 @@ def info() -> None:
 
 @cli.command()
 @click.argument("audio_path", type=click.Path(exists=True, path_type=Path))
-@click.option("--force", is_flag=True, help="既に処理済みでも再実行")
-def test(audio_path: Path, force: bool) -> None:
+@click.option("--force", is_flag=True, help="Phase 1 (文字起こし) を再実行")
+@click.option(
+    "--force-all",
+    is_flag=True,
+    help="--force に加えて既存ノート (Phase 2 結果) も上書き再生成",
+)
+def test(audio_path: Path, force: bool, force_all: bool) -> None:
     """単一ファイルを処理(動作確認用)。"""
     cfg = Config.load()
+    if force_all:
+        force = True
     click.echo(f"処理中: {audio_path}")
-    status = _process_one(audio_path, cfg, force=force)
+    status = _process_one(audio_path, cfg, force=force, force_note=force_all)
     click.echo(f"結果: {status}")
 
 
 @cli.command()
-@click.option("--force", is_flag=True, help="既に処理済みでも再実行")
-def batch(force: bool) -> None:
+@click.option("--force", is_flag=True, help="Phase 1 (文字起こし) を再実行")
+@click.option(
+    "--force-all",
+    is_flag=True,
+    help="--force に加えて既存ノート (Phase 2 結果) も上書き再生成",
+)
+def batch(force: bool, force_all: bool) -> None:
     """未処理ファイルを全部処理して終了。"""
     cfg = Config.load()
+    if force_all:
+        force = True
     files = watcher.iter_audio_files(cfg.jpr_inbox)
-    if force:
+    if force or force_all:
         pending = files
     else:
         pending = []
@@ -265,7 +295,7 @@ def batch(force: bool) -> None:
     click.echo(f"対象: {len(pending)} 件 / 全 {len(files)} 件")
     for i, f in enumerate(pending, 1):
         click.echo(f"[{i}/{len(pending)}] {f.relative_to(cfg.jpr_inbox)}")
-        status = _process_one(f, cfg, force=force)
+        status = _process_one(f, cfg, force=force, force_note=force_all)
         click.echo(f"  → {status}")
 
 
@@ -352,7 +382,12 @@ def failed(clean_stale: bool) -> None:
 
 @cli.command()
 @click.argument("audio_path", type=click.Path(path_type=Path), required=False)
-def retry(audio_path: Path | None) -> None:
+@click.option(
+    "--force-all",
+    is_flag=True,
+    help="既存ノートも上書き再生成(--force 込み)",
+)
+def retry(audio_path: Path | None, force_all: bool) -> None:
     """失敗マーカーのあるファイルを再実行。引数なしで全件、引数で個別。"""
     cfg = Config.load()
     if audio_path:
@@ -368,9 +403,12 @@ def retry(audio_path: Path | None) -> None:
             click.echo(f"[{i}/{len(targets)}] {p} (元ファイルが消えています、skip)")
             continue
         click.echo(f"[{i}/{len(targets)}] {p}")
-        # force=False のままで動く。Phase 1 未完なら最初から、Phase 2 未完
-        # なら Phase 2 から自動で続きを処理する既存ロジックに任せる。
-        status = _process_one(p, cfg)
+        # 通常は force=False/force_note=False で動く。Phase 1 未完なら最初から、
+        # Phase 2 未完なら Phase 2 から自動で続きを処理する既存ロジックに任せる。
+        # --force-all なら全段強制再実行。
+        status = _process_one(
+            p, cfg, force=force_all, force_note=force_all
+        )
         click.echo(f"  → {status}")
 
 
