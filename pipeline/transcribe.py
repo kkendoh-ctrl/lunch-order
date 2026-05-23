@@ -39,6 +39,38 @@ def _load_align_model(cfg: Config):
     return _model_cache[key]
 
 
+def _load_diarize_pipeline(cfg: Config):
+    """WhisperX の diarization pipeline。HF_TOKEN が必要(pyannote モデル)。"""
+    import whisperx
+
+    key = f"diarize:{cfg.whisper_device}"
+    if key not in _model_cache:
+        _model_cache[key] = whisperx.diarize.DiarizationPipeline(
+            use_auth_token=cfg.hf_token, device=cfg.whisper_device
+        )
+    return _model_cache[key]
+
+
+def _maybe_diarize(result: dict, audio, cfg: Config) -> dict:
+    """`cfg.diarize_enabled and cfg.hf_token` の時だけ話者分離を試みる。
+
+    失敗(モデル無し/権限無し/メモリ不足)は致命的ではないので警告して原本を返す。"""
+    if not cfg.diarize_enabled:
+        return result
+    if not cfg.hf_token:
+        print("  [warn] DIARIZE_ENABLED=true だが HF_TOKEN が無いので skip")
+        return result
+    try:
+        import whisperx
+
+        pipeline = _load_diarize_pipeline(cfg)
+        diarize_segments = pipeline(audio)
+        result = whisperx.assign_word_speakers(diarize_segments, result)
+    except Exception as e:
+        print(f"  [warn] diarization failed: {e}")
+    return result
+
+
 def transcribe(audio_path: Path, cfg: Config) -> dict:
     """音声ファイル → セグメント+全文の dict。
     呼び出し側で JSON 保存する。"""
@@ -69,11 +101,19 @@ def transcribe(audio_path: Path, cfg: Config) -> dict:
             # アライメント失敗は致命的ではない。警告だけ出して続行
             print(f"  [warn] alignment failed: {e}")
 
+    # 話者分離(任意、Phase 5c)
+    result = _maybe_diarize(result, audio, cfg)
+
     segments = [
         {
             "start": float(s.get("start", 0)),
             "end": float(s.get("end", 0)),
             "text": str(s.get("text", "")).strip(),
+            **(
+                {"speaker": str(s["speaker"])}
+                if s.get("speaker") is not None
+                else {}
+            ),
         }
         for s in result.get("segments", [])
     ]
@@ -86,6 +126,7 @@ def transcribe(audio_path: Path, cfg: Config) -> dict:
         "model": cfg.whisper_model,
         "language": cfg.whisper_language,
         "align_enabled": cfg.whisper_align_enabled,
+        "diarize_enabled": cfg.diarize_enabled,
         "transcribed_at": datetime.now(timezone.utc).isoformat(),
         "segments": segments,
         "text": full_text,

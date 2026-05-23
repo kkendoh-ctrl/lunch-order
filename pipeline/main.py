@@ -14,6 +14,7 @@ from pathlib import Path
 import click
 
 import aggregator
+import failure_tracker
 import filter as audio_filter
 import note_writer
 import structure
@@ -77,7 +78,19 @@ def _run_structuring(
 
 
 def _process_one(audio_path: Path, cfg: Config, force: bool = False) -> str:
-    """1ファイルを処理(filter → WhisperX → Claude → ノート)。
+    """1ファイルを処理して、status string を返す。失敗マーカーの管理も。"""
+    status = _process_one_inner(audio_path, cfg, force=force)
+    if failure_tracker.status_indicates_failure(status):
+        phase = failure_tracker.classify_phase(status)
+        failure_tracker.record_failure(cfg, audio_path, phase, status)
+    elif not status.startswith("skipped"):
+        # skipped は失敗ではないので消さない(skipped マーカーは別系統)
+        failure_tracker.clear_failure(cfg, audio_path)
+    return status
+
+
+def _process_one_inner(audio_path: Path, cfg: Config, force: bool = False) -> str:
+    """1ファイルを処理(filter → WhisperX → Claude → ノート → 集約)。
     返り値はステータス文字列(ログ用)。"""
     if not force and is_already_processed(cfg, audio_path):
         # Phase 1 は終わっているが Phase 2 がまだなら走らせる
@@ -241,6 +254,47 @@ def structure_cmd(transcript_path: Path, force: bool) -> None:
 
 # Click のサブコマンド名は kebab-case 推奨
 cli.add_command(structure_cmd, name="structure")
+
+
+@cli.command()
+def failed() -> None:
+    """失敗マーカー (_failed/) を一覧表示。"""
+    cfg = Config.load()
+    fails = failure_tracker.list_failures(cfg)
+    if not fails:
+        click.echo("失敗マーカーなし。")
+        return
+    click.echo(f"{len(fails)} 件の失敗マーカー:")
+    for f in fails:
+        click.echo(
+            f"  [{f.phase}] {f.audio_path.name} "
+            f"(試行 {f.attempt_count} 回, 最終 {f.last_attempted_at})"
+        )
+        click.echo(f"    error: {f.error[:200]}")
+
+
+@cli.command()
+@click.argument("audio_path", type=click.Path(path_type=Path), required=False)
+def retry(audio_path: Path | None) -> None:
+    """失敗マーカーのあるファイルを再実行。引数なしで全件、引数で個別。"""
+    cfg = Config.load()
+    if audio_path:
+        targets = [audio_path]
+    else:
+        targets = [f.audio_path for f in failure_tracker.list_failures(cfg)]
+    if not targets:
+        click.echo("再実行対象なし。")
+        return
+    click.echo(f"再実行対象: {len(targets)} 件")
+    for i, p in enumerate(targets, 1):
+        if not p.exists():
+            click.echo(f"[{i}/{len(targets)}] {p} (元ファイルが消えています、skip)")
+            continue
+        click.echo(f"[{i}/{len(targets)}] {p}")
+        # force=False のままで動く。Phase 1 未完なら最初から、Phase 2 未完
+        # なら Phase 2 から自動で続きを処理する既存ロジックに任せる。
+        status = _process_one(p, cfg)
+        click.echo(f"  → {status}")
 
 
 @cli.command()

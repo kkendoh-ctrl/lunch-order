@@ -20,6 +20,7 @@ from typing import Any
 
 import yaml
 
+import reminders
 from config import Config
 
 
@@ -536,9 +537,28 @@ def _render_important_index(recordings: list[dict], cfg: Config) -> str:
     return "\n".join(lines)
 
 
+def _build_todo_entries_for_reminders(recordings: list[dict]) -> list[dict]:
+    """recordings の body から ToDo を抽出して reminders.write_calendar に渡す形に。"""
+    out: list[dict] = []
+    for r in recordings:
+        for i, todo in enumerate(_extract_todos(r["body"])):
+            out.append(
+                {
+                    "uid": reminders.todo_uid(r["path"].stem, i),
+                    "summary": todo["text"],
+                    "due": todo["due"],
+                    "description": (
+                        f"録音 {r['date']} {r['time_short']} (注: {r['path'].stem}) より"
+                    ),
+                }
+            )
+    return out
+
+
 def regenerate_index_notes(cfg: Config) -> dict[str, Path]:
     """一覧/ToDo.md と 一覧/重要度高.md を Vault 全スキャンで再生成する。
-    返り値: {"todo": Path, "important": Path}"""
+    `cfg.reminders_enabled` が True なら _reminders/todos.ics も書く。
+    返り値: {"todo": Path, "important": Path, "ics"?: Path}"""
     recordings = _collect_all_recordings(cfg)
     out_dir = cfg.vault / _INDEX_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -551,7 +571,11 @@ def regenerate_index_notes(cfg: Config) -> dict[str, Path]:
         _render_important_index(recordings, cfg), encoding="utf-8"
     )
 
-    return {"todo": todo_path, "important": important_path}
+    out: dict[str, Path] = {"todo": todo_path, "important": important_path}
+    if cfg.reminders_enabled:
+        ics_entries = _build_todo_entries_for_reminders(recordings)
+        out["ics"] = reminders.write_calendar(ics_entries, cfg)
+    return out
 
 
 # -------------------- ④ 一括 (録音1件の処理後に呼ぶ用) --------------------

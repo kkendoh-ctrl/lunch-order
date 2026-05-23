@@ -378,6 +378,39 @@ def test_regenerate_index_notes_empty_vault(tmp_path: Path) -> None:
     imp_text = out["important"].read_text(encoding="utf-8")
     assert "全 0 件" in todo_text
     assert "全 0 件" in imp_text
+    # reminders_enabled=True がデフォルト → .ics も書かれる(空でも)
+    assert "ics" in out
+    ics_text = out["ics"].read_text(encoding="utf-8")
+    assert "BEGIN:VCALENDAR" in ics_text
+    assert "BEGIN:VTODO" not in ics_text
+
+
+def test_regenerate_index_notes_writes_ics_with_todos(tmp_path: Path) -> None:
+    cfg = _mk_cfg(tmp_path)
+    _write_note(
+        cfg,
+        date="2026-05-23",
+        hhmmss="13-39-19",
+        structured=_structured(),  # 期限ありの 1 件
+    )
+    out = aggregator.regenerate_index_notes(cfg)
+    ics = out["ics"].read_text(encoding="utf-8")
+    assert "BEGIN:VTODO" in ics
+    assert "SUMMARY:来週までに見積もり確認" in ics
+    assert "DUE;VALUE=DATE:20260530" in ics
+    assert "UID:13-39-19-0@voice-pipeline" in ics
+
+
+def test_regenerate_index_notes_skips_ics_when_disabled(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    cfg = replace(_mk_cfg(tmp_path), reminders_enabled=False)
+    _write_note(
+        cfg, date="2026-05-23", hhmmss="13-39-19", structured=_structured()
+    )
+    out = aggregator.regenerate_index_notes(cfg)
+    assert "ics" not in out
+    assert not (cfg.vault / "_reminders" / "todos.ics").exists()
 
 
 # -------------------- 統合 --------------------

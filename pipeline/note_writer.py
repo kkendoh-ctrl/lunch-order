@@ -248,7 +248,9 @@ def render_note(
             continue
         mm = int(start // 60)
         ss = int(start % 60)
-        lines.append(f"[{mm:02d}:{ss:02d}] {text}")
+        speaker = seg.get("speaker")
+        speaker_tag = f" {{{speaker}}}" if speaker else ""
+        lines.append(f"[{mm:02d}:{ss:02d}]{speaker_tag} {text}")
     lines.append("")
 
     # 日次ノートへの参照

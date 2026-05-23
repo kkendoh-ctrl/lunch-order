@@ -65,6 +65,20 @@ class Config:
     pii_dict_path: Path | None = None
     pii_allowlist_path: Path | None = None
 
+    # Phase 5: diarization と失敗追跡・Reminders 出力先
+    diarize_enabled: bool = False
+    hf_token: str = ""
+    failed_dir_name: str = "_failed"
+    reminders_enabled: bool = True
+
+    @property
+    def failed_dir(self) -> Path:
+        return self.vault / self.failed_dir_name
+
+    @property
+    def reminders_dir(self) -> Path:
+        return self.vault / "_reminders"
+
     @classmethod
     def load(cls) -> "Config":
         vault = _get_path("VAULT_PATH")
@@ -104,6 +118,9 @@ class Config:
             pii_mask_enabled=_get_bool("PII_MASK_ENABLED", True),
             pii_dict_path=pii_dict_path,
             pii_allowlist_path=pii_allowlist_path,
+            diarize_enabled=_get_bool("DIARIZE_ENABLED", False),
+            hf_token=_get("HF_TOKEN"),
+            reminders_enabled=_get_bool("REMINDERS_ENABLED", True),
         )
 
     def load_initial_prompt(self) -> str | None:
