@@ -259,3 +259,70 @@ def transcribe(audio_path: Path, cfg: Config) -> dict:
 - **`whisperx.align` の API 変更**: `_load_align_model` も `whisperx.load_align_model(...)` を呼んでいる。同様に WhisperX 3.x で `model_name` キーワード必須になっている可能性あり。エラー出たら traceback 貼ってください
 - **アライメント不要なら `WHISPER_ALIGN_ENABLED=false`** にして回避できる(.env で設定)
 - **Claude 構造化での JSON パースエラー**: Phase 2 のプロンプト出力が不正なら `_extract_json` がフォールバックを試みるが、それでも失敗するなら `_失敗/` には行かず `structure_error` で止まる(現状)。要 traceback
+
+## リモート側からの応答 #3 (2026-05-23 / pyannote VAD ハング対処)
+
+### 状況確認
+
+ローカル側からの報告で「2 時間 22 分 VAD でハング」と判明。
+ログ末尾が `whisperx.vads.pyannote - INFO - Performing voice activity detection using Pyannote...` で止まっていて、それ以降出力ゼロ。
+
+**結論: pyannote VAD は Windows + CPU で長尺音声を処理すると詰まる
+既知の挙動**。WhisperX の GitHub Issues にも同様の報告複数あり。
+
+### 対処: WhisperX の VAD エンジンを silero に切替可能にした
+
+`whisperx.load_model` に `vad_method` パラメータがあり、デフォルトの
+`pyannote` から `silero` に切り替えると劇的に軽くなる(silero は
+torch jit script ベースの軽量モデル)。精度差は voice memo 用途で
+実用上問題なし。
+
+### 変更内容(push 済、commit に含める)
+
+1. **`config.py`**: `whisper_vad_method: str = "pyannote"` フィールド追加
+   (デフォルトはあえて pyannote のまま=既存挙動互換、`.env` で明示
+   切替する運用)
+2. **`transcribe.py::_load_model`**: `kwargs["vad_method"] = cfg.whisper_vad_method`
+3. **`.env.example`**: `WHISPER_VAD_METHOD=silero` を bronzeman 向け推奨
+   デフォルトとして記載
+4. **`tests/test_transcribe.py`**: vad_method 受け渡しの 2 件追加
+
+108 件 pass。
+
+### ローカル側でやること
+
+1. プロセス殺す:
+   ```powershell
+   Stop-Process -Name python -Force
+   ```
+2. `git pull origin claude/voice-memo-recovery-ZT7v1`
+3. `.env` に `WHISPER_VAD_METHOD=silero` を追記(or `.env.example` の
+   該当行をコピー)
+4. ついでに念のためアライメントも切る(さらに高速化):
+   `WHISPER_ALIGN_ENABLED=false`
+5. **短いテスト用録音 (30 秒〜2 分)** をどこかで作って取込み or `inbox/`
+   に置いて再テスト。録音 138 (~1.5〜3 時間想定) で再挑戦するのは
+   silero の動作確認後
+
+### 推奨手順(短録音テスト → 長尺本番)
+
+```powershell
+# 1. 短録音で動作確認 (5分以内に Phase 1〜5 通る想定)
+python main.py test "G:\マイドライブ\01.アイデア\音声メモログ\inbox\<短録音.m4a>"
+
+# 2. 動いたら長尺
+python main.py test "G:\マイドライブ\01.アイデア\音声メモログ\inbox\録音 138.m4a"
+
+# silero + アライメント無効なら、録音 138 (推定 90 分音声) で
+# 30〜60 分目安で完了するはず
+```
+
+### もし silero でも詰まったら
+
+その時はもう `Stop-Process` してから:
+- `Get-Process python | Select CPU, WorkingSet` でメモリリーク確認
+- ログ末尾を再度報告
+- リモート側で「VAD 完全スキップ」モード(WhisperX に `vad_filter=False`
+  に相当する設定)を追加する
+
+を検討します。

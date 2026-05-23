@@ -16,7 +16,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import Config
 
 
-def _mk_cfg(tmp_path: Path, *, prompt_file: Path | None = None) -> Config:
+def _mk_cfg(
+    tmp_path: Path,
+    *,
+    prompt_file: Path | None = None,
+    vad_method: str = "pyannote",
+) -> Config:
     vault = tmp_path / "vault"
     return Config(
         jpr_inbox=tmp_path / "jpr",
@@ -32,6 +37,7 @@ def _mk_cfg(tmp_path: Path, *, prompt_file: Path | None = None) -> Config:
         whisper_language="ja",
         whisper_initial_prompt_path=prompt_file,
         whisper_align_enabled=False,
+        whisper_vad_method=vad_method,
         file_stable_wait_s=5,
         file_stable_poll_s=2,
         anthropic_api_key="",
@@ -135,6 +141,40 @@ def test_load_model_omits_asr_options_when_prompt_empty(
     transcribe._load_model(cfg)
 
     assert "asr_options" not in captured["kwargs"]
+
+
+def test_load_model_passes_vad_method_silero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """vad_method=silero が load_model に渡されること(pyannote ハング回避)。"""
+    cfg = _mk_cfg(tmp_path, vad_method="silero")
+
+    captured: dict = {}
+    _install_whisperx_stub(monkeypatch, captured)
+
+    import transcribe
+
+    transcribe._model_cache.clear()
+    transcribe._load_model(cfg)
+
+    assert captured["kwargs"]["vad_method"] == "silero"
+
+
+def test_load_model_passes_vad_method_pyannote_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """指定無しなら pyannote が渡される(WhisperX のデフォルト合わせ)。"""
+    cfg = _mk_cfg(tmp_path, vad_method="pyannote")
+
+    captured: dict = {}
+    _install_whisperx_stub(monkeypatch, captured)
+
+    import transcribe
+
+    transcribe._model_cache.clear()
+    transcribe._load_model(cfg)
+
+    assert captured["kwargs"]["vad_method"] == "pyannote"
 
 
 def test_load_model_caches_within_process(

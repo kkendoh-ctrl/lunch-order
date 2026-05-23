@@ -64,6 +64,11 @@ class Config:
     anthropic_effort: str
     structuring_prompt_path: Path | None
 
+    # WhisperX VAD エンジン。pyannote (default) は Windows + CPU で長尺音声に
+    # ハングする既知問題があるので、bronzeman 運用では silero を推奨。
+    # デフォルトはあえて pyannote のまま(明示的に切り替える運用)。
+    whisper_vad_method: str = "pyannote"
+
     # Phase 4: PII マスキング。既存のテスト fixture を壊さないようデフォルト付き。
     pii_mask_enabled: bool = True
     pii_dict_path: Path | None = None
@@ -112,6 +117,7 @@ class Config:
             whisper_language=_get("WHISPER_LANGUAGE", "ja"),
             whisper_initial_prompt_path=initial_prompt_path,
             whisper_align_enabled=_get_bool("WHISPER_ALIGN_ENABLED", True),
+            whisper_vad_method=_get("WHISPER_VAD_METHOD", "pyannote"),
             file_stable_wait_s=_get_float("FILE_STABLE_WAIT_S", 5),
             file_stable_poll_s=_get_float("FILE_STABLE_POLL_S", 2),
             anthropic_api_key=_get("ANTHROPIC_API_KEY"),

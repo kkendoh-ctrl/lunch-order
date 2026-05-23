@@ -28,6 +28,7 @@ def _load_model(cfg: Config):
             "device": cfg.whisper_device,
             "compute_type": cfg.whisper_compute_type,
             "language": cfg.whisper_language,
+            "vad_method": cfg.whisper_vad_method,
         }
         prompt = cfg.load_initial_prompt()
         if prompt:
