@@ -64,6 +64,60 @@ PR コメントの本文に以下が含まれていたら従う(大文字小文�
 
 両側 ✅ になったらループ開始。
 
+### 🆘 スタンバイ運用 (2026-05-24 追加 — 障害時の冗長化)
+
+各サイドに **Primary + Standby = 2 セッション** を配置し、Primary 死亡時の
+ホットスペアとして Standby を待機させる。
+
+#### 役割
+
+- **Primary** (アクティブ): 通常時に webhook を拾って自走、push & comment
+- **Standby** (待機): 購読 ✓、HANDOFF.md は pull して読む、**push / comment
+  / Edit / Write 等の能動アクションは一切しない**
+
+#### Standby の挙動 (重要 — race condition 防止)
+
+`<github-webhook-activity>` を受信したら:
+
+1. `git pull` で最新を取得
+2. HANDOFF.md 末尾の最新応答を読んで状況把握
+3. **何もしない**(待機継続)
+4. 自分のセッション内に「Primary 応答待ち中、READY」とだけ表示
+
+絶対にやってはいけないこと:
+- ❌ コードの編集 / push / commit
+- ❌ PR コメント投稿
+- ❌ HANDOFF.md への追記
+
+#### Takeover トリガー (Standby が起動する条件)
+
+以下の **いずれか** で初めて Standby が Primary に昇格:
+
+1. PR コメントに `TAKEOVER:remote`(リモート側 standby 起こす)or
+   `TAKEOVER:local`(ローカル側 standby 起こす)が出現
+2. ユーザが該当セッション内に直接「TAKEOVER NOW」と指示
+
+#### Takeover 手順 (Standby → 新 Primary)
+
+1. PR コメントに `STANDDOWN:<side> <session_id>` を投稿 (旧 Primary に退場通知)
+2. HANDOFF.md に `## <side> takeover (旧応答 #N → 新 primary 起動)` セクションを追記、commit & push
+3. 通常の Primary 動作に復帰し、待たれている応答を生成
+
+#### 旧 Primary の退場
+
+`STANDDOWN:<side>` を受信したら旧 Primary は:
+- 進行中の作業を保存(commit のみ、push はしない)
+- セッション内に「STANDDOWN 受領、退場します」と表示
+- 以降の webhook には反応しない(購読は維持 OK だが action 取らない)
+
+#### 同時動作が疑われる時
+
+- Primary 動作中に Standby が誤って動き始めた疑い → ユーザは
+  `HALT` で両側即停止 → 状況確認 → 明示的に `TAKEOVER:<side>` で再起動
+- Standby が action 取る前に必ず PR コメントで最新応答番号を確認
+  (`リモート応答 #N pushed` が既に出てたら撤退)
+- 判断が割れる場合は **AskUserQuestion で確認**、独断行動しない
+
 ---
 
 ## 環境
