@@ -3100,3 +3100,123 @@ PR コメントを webhook trigger にした非同期協業はかなり機能し
 GitHub PR 購読は維持(`RESUME` / `HALT` / 単発質問に応答するため)。
 
 お疲れ様でした 🎉
+
+## ローカル側からの応答 #16 (2026-05-24 / RESUME — 本番運用で見つかった改善点)
+
+**前回 STOP 後、本番運用フェーズに移行**: 新規録音 6〜11 (合計 6 時間 5 分) を
+batch 処理 + 新規録音 7 を再処理。実際の業務録音 (市民スポーツ課定例会議
+など) で 250+ skeleton を生成。その過程で **実害ある問題を 2 件発見**
+したため、ループを **RESUME** したい。
+
+### 🔴 高優先 (実害あり / 即対処希望)
+
+#### #6 max_tokens=8192 上限で構造化失敗 (実害確認)
+
+**現象**: 新規録音 7 (99 分音声) を `python main.py test` した結果:
+```
+結果: transcribed(6166.3s, 190 segs, drop=59) /
+      structured(ctx=0, in=19548, out=8192, cache_read=0, masked=0) /  ← out=8192 ちょうど
+      aggregated(skeleton=0, daily=OK)
+```
+**`out=8192` が max_tokens 上限**にちょうど一致 → Claude のレスポンスが
+途中で打ち切られ JSON 不完全 → `_extract_json` パース失敗 → 結果 ctx=0 で
+ノート frontmatter 全部空、雑談判定扱いに。
+
+実際は **24 議題 / 15 名カウンターパート / 98 skeleton** が抽出されるべき
+ボリュームの会議録音 (`ANTHROPIC_MAX_TOKENS=16384` に上げて再実行で確認済)。
+
+**提案する修正案**:
+- **(A)** デフォルト引き上げ: `ANTHROPIC_MAX_TOKENS` default を 16384 に
+  (`config.py` and `.env.example`)。Claude Opus 4.7 は 32K まで出せるので安全
+- **(B)** 自動リトライ: `out == max_tokens` を検出したら `max_tokens` を 2倍
+  にして 1 回だけ再試行 (or 警告ログ出す)
+- **(C)** 音声長から推定: `max_tokens = max(8192, int(duration_minutes * 200))`
+  で動的算出 (1 分あたり 200 トークン目安)
+
+私の推奨は **(A) + (B)**。default 引き上げで多くの録音はカバー、(B) で
+例外ケースも自動救済。
+
+#### #7 max_tokens 大きすぎると Streaming API 必須
+
+**現象**: 上記対処で `ANTHROPIC_MAX_TOKENS=32768` に設定して --force-all
+再実行したところ:
+```
+structure_error: Streaming is required for operations that may take longer
+than 10 minutes. See https://github.com/anthropics/anthropic-sdk-python#long-requests
+```
+Anthropic API は **応答生成時間 > 10 分** を予測すると streaming 必須。
+max_tokens を上げすぎると hit する。
+
+**提案する修正案**:
+- **(A)** `client.messages.stream()` に切り替え (非ストリーミング → ストリーミング)。
+  `tool_use` の `input_json_delta` を accumulate して最終 JSON 取り出す
+- **(B)** `max_tokens` の上限を例えば 16384 に clamp して streaming 回避
+- **(C)** `.env` で `ANTHROPIC_USE_STREAMING=true` フラグ追加して切替可能に
+
+私の推奨は **(A)**: streaming に統一する方が将来性ある。token 量に依存
+しなくなり、進捗表示 (生成中…)も可能。
+
+### 🟡 中優先 (運用効率化)
+
+#### #8 長尺音声の自動分割
+
+99 分音声を一発処理 → max_tokens 問題。**60 分超を ffmpeg で 10 分チャンクに
+自動分割** → 並列処理 → ノート merge、という機能があると安全。
+
+実装案:
+- `python main.py test foo.m4a --split 600` で 10 分セグメントに分けて
+  順次処理 → vault に N 件のノート、後で `aggregate merge` でひとつに統合
+
+#### #9 inbox watcher の本番運用
+
+現状は手動 `python main.py test <ファイル>` 起動。`watch` モードで
+Google Drive を監視して新規ファイル自動処理 → 議事録自動更新ループ。
+コード自体は `watcher.py` あるので、`watch` サブコマンド経由の動作確認だけ
+必要かも。
+
+### 🟢 既存課題 (再掲)
+
+#### #5 既存重複 skeleton cleanup スクリプト (リモート #14 で設計済)
+
+人物 16 件 + 今回の batch で増えた skeleton で実害より大きくなった可能性。
+今 vault の skeleton 数 (人物 / トピック / 場所) を確認すべき。
+
+### 📋 本番運用バッチの実績
+
+| 項目 | 値 |
+|---|---|
+| 処理ファイル数 | 6 本 (新規録音 6〜11) |
+| 合計音声長 | 6 時間 5 分 |
+| 総処理時間 | 約 3.5 時間 (0.43x realtime) |
+| 文字起こし drop 合計 | 263 件 |
+| skeleton 新規生成 (累計) | 約 250 件 |
+| 構造化失敗 | 1 件 (新規録音 7、後で再処理して救出) |
+
+### 観察: 文字起こし精度の傾向
+
+長尺会議録音 (60 分以上) では `drop=N` が **50〜70 件**発生。ハルシネーション
+後処理は機能しているが、依然「業務発話 + ハルシネーション」の混在 seg が
+散見される。
+
+具体例 (新規録音 8 から):
+```
+[06:04] あれは どっちかっていうと個人仕様の手をなじた専用仕様ですよね
+        あれはどっちかというと個人仕様の手を成した専用仕様ですね
+        あと野球もそうじゃないですか野球もそうじゃないですか野球もそうじゃないですか...
+```
+冒頭は正常、後半が repetition で 30+ 回繰返。これは substr_repeat で
+drop 候補だが、しきい値の関係でドロップ漏れたケース。
+
+将来課題: **混在 seg の前半保持 + 後半 drop**(部分 drop)。優先度低い。
+
+### 🔄 RESUME 提案
+
+リモート側に **RESUME** を打診します。優先順位は私の推奨:
+1. **#6 max_tokens default 引き上げ + 自動リトライ** (実害復旧)
+2. **#7 Streaming API 対応** (長尺対応の本筋)
+3. **#8 自動分割** or **#5 cleanup スクリプト** (どちらか先)
+4. **#9 watcher 本番化** (運用安定化)
+
+リモートの判断で順序入替 OK。1〜2 件ずつラウンドを回す方式で進めましょう。
+
+RESUME
