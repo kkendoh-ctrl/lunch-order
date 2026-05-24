@@ -14,6 +14,7 @@ import traceback
 from pathlib import Path
 
 import click
+import yaml
 
 # PowerShell の Tee-Object でログを取ると、Python のデフォルトのブロック
 # バッファリングのせいで進捗が長時間止まって見える。改行ごとに flush する
@@ -32,6 +33,7 @@ import failure_tracker
 import filter as audio_filter
 import importer
 import note_writer
+import skeleton_merge
 import structure
 import transcribe as tx
 import watcher
@@ -544,6 +546,68 @@ def aggregate() -> None:
     click.echo(f"  日次ノート: {len(summary['dailies'])} 本")
     click.echo(f"  一覧: {summary['indexes']['todo']}")
     click.echo(f"  一覧: {summary['indexes']['important']}")
+
+
+@cli.command("merge-skeletons")
+@click.argument(
+    "alias_file", type=click.Path(exists=True, dir_okay=False, path_type=Path)
+)
+@click.option(
+    "--apply",
+    "do_apply",
+    is_flag=True,
+    help="実適用する(指定しなければ dry-run、書き換え対象を表示するだけ)",
+)
+def merge_skeletons(alias_file: Path, do_apply: bool) -> None:
+    """alias テーブル (YAML) に従って重複 skeleton を統合する one-off コマンド。
+
+    \b
+    例 alias.yaml:
+      人物:
+        アイテックス: アイタックス          # アイテックス を アイタックス に統合
+        リアックスさん: リアックス
+      トピック: {}
+      場所: {}
+
+    安全のためデフォルトは dry-run。Vault スキャン結果と書き換え予定を表示し、
+    `--apply` で初めて実書き換え + 統合元 skeleton 削除を行う。
+
+    実行内容:
+      1. 統合元 skeleton の `## メモ` 本文を統合先に転記
+      2. vault/**/*.md 内の `[[統合元]]` 系 wikilink を `[[統合先]]` に書き換え
+      3. 統合元 skeleton ファイルを削除
+
+    実行後は `python main.py aggregate` で日次/一覧を再生成すること。"""
+    cfg = Config.load()
+    if not cfg.vault.exists():
+        raise click.ClickException(f"VAULT_PATH が存在しない: {cfg.vault}")
+
+    try:
+        entries = skeleton_merge.load_alias_table(alias_file)
+    except (ValueError, yaml.YAMLError) as e:
+        raise click.ClickException(f"alias ファイル不正: {e}")
+
+    if not entries:
+        click.echo("alias テーブルが空。何もしない。")
+        return
+
+    click.echo(f"alias: {len(entries)} 件 / vault: {cfg.vault}")
+    click.echo("")
+    plans = skeleton_merge.plan_merges(entries, cfg)
+    click.echo(skeleton_merge.format_plan_report(plans))
+    click.echo("")
+
+    if not do_apply:
+        click.echo("dry-run モード(`--apply` で実行)")
+        return
+
+    report = skeleton_merge.apply_merges(plans, cfg, dry_run=False)
+    click.echo("=" * 40)
+    click.echo("適用結果:")
+    click.echo(skeleton_merge.format_apply_report(report))
+    if report.plans_applied:
+        click.echo("")
+        click.echo("次は: python main.py aggregate で日次/一覧を再生成")
 
 
 @cli.command()
