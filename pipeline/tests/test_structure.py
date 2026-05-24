@@ -191,14 +191,31 @@ class _StubResponse:
         )
 
 
+class _StubStream:
+    """Anthropic SDK の `client.messages.stream(...)` が返すコンテキスト
+    マネージャの最小スタブ。`get_final_message()` で固定 Response を返す。"""
+
+    def __init__(self, response: _StubResponse) -> None:
+        self._response = response
+
+    def __enter__(self) -> "_StubStream":
+        return self
+
+    def __exit__(self, *args) -> None:
+        return None
+
+    def get_final_message(self) -> _StubResponse:
+        return self._response
+
+
 class _StubMessages:
     def __init__(self, captured: dict, response_factory) -> None:
         self.captured = captured
         self._response_factory = response_factory
 
-    def create(self, **kwargs) -> _StubResponse:
+    def stream(self, **kwargs) -> _StubStream:
         self.captured.update(kwargs)
-        return self._response_factory()
+        return _StubStream(self._response_factory())
 
 
 class _StubClient:
@@ -511,6 +528,97 @@ def test_structure_transcript_raises_when_response_empty(
     audio = Path("/x/Just Press Record/2026-05-23/13-39-19.m4a")
     with pytest.raises(RuntimeError):
         structure.structure_transcript(transcript, audio, cfg)
+
+
+# -------------------- tool schema 自体 --------------------
+
+
+# -------------------- streaming / max_tokens 警告 (応答 #16) --------------------
+
+
+def test_structure_transcript_uses_streaming_api(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """messages.stream(...) が呼ばれること (create ではなく)。"""
+    cfg = _mk_cfg(tmp_path, pii_enabled=False, dict_path=None)
+    captured: dict = {}
+
+    def factory():
+        return _StubResponse(content=[_tool_use_block({"contexts": []})])
+
+    _install_anthropic_stub(monkeypatch, captured, factory)
+
+    transcript = {
+        "duration_s": 5.0,
+        "segments": [{"start": 0.0, "end": 5.0, "text": "テスト"}],
+        "text": "テスト",
+    }
+    audio = Path("/x/Just Press Record/2026-05-23/13-39-19.m4a")
+    # ここで例外が出なければ stream() が正しく呼ばれている (stub に create() は無い)
+    result = structure.structure_transcript(transcript, audio, cfg)
+    assert result["structuring_format"] == "tool_use"
+    # captured に messages.stream() の引数が入っている
+    assert "messages" in captured
+    assert "tools" in captured
+
+
+def test_structure_transcript_warns_when_max_tokens_exhausted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """out_tokens == max_tokens のとき警告が stdout に出る。"""
+    cfg = _mk_cfg(tmp_path, pii_enabled=False, dict_path=None)
+    captured: dict = {}
+
+    def factory():
+        # max_tokens=8192 ちょうど使い切ったケースをシミュレート
+        resp = _StubResponse(content=[_tool_use_block({"contexts": []})])
+        resp.usage = types.SimpleNamespace(
+            input_tokens=100,
+            output_tokens=8192,  # max_tokens にちょうど一致
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=0,
+        )
+        return resp
+
+    _install_anthropic_stub(monkeypatch, captured, factory)
+
+    cfg_low = Config(**{**cfg.__dict__, "anthropic_max_tokens": 8192})
+    transcript = {
+        "duration_s": 5.0,
+        "segments": [{"start": 0.0, "end": 5.0, "text": "テスト"}],
+        "text": "テスト",
+    }
+    audio = Path("/x/Just Press Record/2026-05-23/13-39-19.m4a")
+    structure.structure_transcript(transcript, audio, cfg_low)
+
+    out = capsys.readouterr().out
+    assert "max_tokens=8192" in out
+    assert "使い切り" in out
+    assert "out=8192" in out
+
+
+def test_structure_transcript_no_warn_below_max_tokens(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """out_tokens < max_tokens なら警告無し。"""
+    cfg = _mk_cfg(tmp_path, pii_enabled=False, dict_path=None)
+    captured: dict = {}
+    _install_anthropic_stub(monkeypatch, captured)  # default = output_tokens=50
+
+    transcript = {
+        "duration_s": 5.0,
+        "segments": [{"start": 0.0, "end": 5.0, "text": "テスト"}],
+        "text": "テスト",
+    }
+    audio = Path("/x/Just Press Record/2026-05-23/13-39-19.m4a")
+    structure.structure_transcript(transcript, audio, cfg)
+
+    out = capsys.readouterr().out
+    assert "使い切り" not in out
 
 
 # -------------------- tool schema 自体 --------------------

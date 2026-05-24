@@ -274,8 +274,17 @@ def structure_transcript(
     # 構造化タスクは整形作業で thinking の効きが小さいため、JSON 必達を取って
     # thinking は外す。`output_config={"effort": ...}` も thinking 連動の
     # パラメータなので一緒に外す。
+    #
+    # ストリーミング API を使う理由:
+    # - 99 分音声で max_tokens=8192 を out=8192 ちょうどで使い切り構造化失敗の
+    #   実害が発生(応答 #16)。max_tokens を上げる必要があるが、非ストリーミング
+    #   API は応答生成時間が 10 分を超えると "Streaming is required..." エラー
+    #   になる
+    # - ストリーミング API ならその制限がなく、tool_use の入力 JSON が長く
+    #   なっても安全に組み立てられる。`get_final_message()` で従来と同じ
+    #   Message 構造を取り出せるので呼び出し側のロジックは不変
     tool_def = _structured_tool_schema()
-    response = client.messages.create(
+    with client.messages.stream(
         model=cfg.anthropic_model,
         max_tokens=cfg.anthropic_max_tokens,
         system=[
@@ -288,7 +297,19 @@ def structure_transcript(
         messages=[{"role": "user", "content": user_content}],
         tools=[tool_def],
         tool_choice={"type": "tool", "name": _STRUCTURED_TOOL_NAME},
-    )
+    ) as stream:
+        response = stream.get_final_message()
+
+    # max_tokens 上限ちょうどで打ち切られた可能性を検出して警告。
+    # 出力 truncation が起きると tool_use の JSON が不完全になり、ノートが
+    # 雑談判定扱い (ctx=0) になる実害が出る (応答 #16 で確認済)。
+    out_tokens = getattr(response.usage, "output_tokens", 0) or 0
+    if out_tokens >= cfg.anthropic_max_tokens:
+        print(
+            f"  [warn] Phase 2 が max_tokens={cfg.anthropic_max_tokens} を"
+            f" 使い切りました (out={out_tokens})。"
+            f"ANTHROPIC_MAX_TOKENS を引き上げて --force-all してください。"
+        )
 
     structured: dict | None = None
     structuring_format = "tool_use"

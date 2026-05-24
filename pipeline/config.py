@@ -222,7 +222,9 @@ class Config:
             file_stable_poll_s=_get_float("FILE_STABLE_POLL_S", 2),
             anthropic_api_key=_get("ANTHROPIC_API_KEY"),
             anthropic_model=_get("ANTHROPIC_MODEL", "claude-opus-4-7"),
-            anthropic_max_tokens=_get_int("ANTHROPIC_MAX_TOKENS", 8192),
+            # default 16384 (応答 #16): 8192 だと 99 分音声で構造化失敗の実害あり。
+            # ストリーミング API 経由なので上限を上げても 10 分タイムアウトは出ない。
+            anthropic_max_tokens=_get_int("ANTHROPIC_MAX_TOKENS", 16384),
             anthropic_effort=_get("ANTHROPIC_EFFORT", "medium"),
             structuring_prompt_path=structuring_prompt_path,
             pii_mask_enabled=_get_bool("PII_MASK_ENABLED", True),

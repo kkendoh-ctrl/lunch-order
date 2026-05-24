@@ -3220,3 +3220,97 @@ drop 候補だが、しきい値の関係でドロップ漏れたケース。
 リモートの判断で順序入替 OK。1〜2 件ずつラウンドを回す方式で進めましょう。
 
 RESUME
+
+## リモート側からの応答 #16 (2026-05-24 / #6 + #7 セット対応 — streaming + max_tokens)
+
+✅ RESUME 受領。**#6 と #7 を同一ラウンドで対応** (両者とも `structure.py` の
+同じ箇所、`messages.create` 経由のため分割するメリット無し)。
+
+### 何を変えたか
+
+#### 1. Phase 2 を Anthropic streaming API に切替
+
+`structure.py::structure_transcript`:
+
+```python
+# 旧:
+# response = client.messages.create(...)
+
+# 新:
+with client.messages.stream(
+    model=..., max_tokens=..., system=[...], messages=[...],
+    tools=[tool_def], tool_choice={"type": "tool", "name": ...},
+) as stream:
+    response = stream.get_final_message()
+```
+
+`get_final_message()` は非ストリーミング `messages.create()` と同じ Message
+オブジェクトを返すので、tool_use ブロック抽出ロジックは不変。
+
+これで:
+- 応答生成時間 > 10 分でも `Streaming is required...` エラーが出ない
+- `max_tokens` を実質モデル上限(Claude Opus 4.7 で 32768)まで上げられる
+
+#### 2. `ANTHROPIC_MAX_TOKENS` default を 8192 → 16384 に引き上げ
+
+`config.py` / `.env.example` 両方更新。99 分会議クラスでも余裕。
+コスト気にしないなら 32768 にしてもらっても OK(`.env` で上書き)。
+
+#### 3. `out >= max_tokens` 検出時に警告ログ
+
+```
+[warn] Phase 2 が max_tokens=16384 を使い切りました (out=16384)。
+ANTHROPIC_MAX_TOKENS を引き上げて --force-all してください。
+```
+
+自動リトライ(local 案 B)までは入れず。理由:
+- max_tokens=16384 で打ち切られるケースは異常に長い会議(2 時間超)
+- 自動 2 倍リトライはコスト 2 倍で、対応が手戻り(問題が見えない)
+- 警告で明示的に通知 → ユーザが `.env` を 32768 に上げて `--force-all` の
+  ワークフローが透明で再現性ある
+
+### テスト
+
+- 既存 PII / tool_use / Markdown フォールバック / 空応答 raise 等を
+  streaming stub に対応(stub に `messages.stream(...)` を追加、`create()`
+  は削除して streaming 一本化)
+- 新規:
+  - `test_structure_transcript_uses_streaming_api`: stream() が呼ばれる
+  - `test_structure_transcript_warns_when_max_tokens_exhausted`: out==max_tokens で警告
+  - `test_structure_transcript_no_warn_below_max_tokens`: out<max_tokens なら警告なし
+- **全 190 件 pass**(前回 187 + 3 件)
+
+### 残課題の進行状況
+
+- [x] **#6 max_tokens 引き上げ + 上限警告** (今回)
+- [x] **#7 Streaming API 対応** (今回)
+- [ ] **#8 長尺音声の自動分割** ← 中優先
+- [ ] **#9 watcher 本番化** ← 中優先
+- [ ] **#5 既存重複 skeleton cleanup** ← 既存課題
+
+### ローカル側でやること
+
+1. `git pull origin claude/voice-memo-recovery-ZT7v1`
+2. **新規録音 7 (99 分音声)** を `--force-all` で再処理:
+   ```powershell
+   python main.py test "G:\マイドライブ\...\新規録音 7.m4a" --force-all 2>&1 | Tee-Object out_rec7_v2.log
+   ```
+3. 確認シグナル:
+   - `structured(ctx=N/tool_use, ...)` の **`out` が max_tokens=16384 未満** であること
+   - **24 議題 / 15 名カウンターパート / 98 skeleton** の期待値が出ること
+     (or 妥当に近い数)
+   - 10 分タイムアウトエラーが消えていること
+4. 応答 #17 で報告:
+   - 旧 (out=8192 で失敗) との比較
+   - skeleton 増加数
+   - 所要時間(streaming で進捗どう見えたか)
+
+### 想定される 3 ケース → 次アクション
+
+| 観測 | 次アクション |
+|---|---|
+| ✅ 新規録音 7 構造化成功 + skeleton 妥当 | **#8 自動分割** か **#9 watcher 本番化** を選んで進める。私の推奨は #9 (運用安定化が先) |
+| ⚠️ 16384 でも `out=16384` で警告 | `.env` で 32768 に上げて再テスト |
+| ❌ streaming で別エラー (auth 等) | エラー全文 + `pip show anthropic` 貼って escalate |
+
+ループ継続中。
