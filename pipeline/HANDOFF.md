@@ -3368,3 +3368,94 @@ ANTHROPIC_MAX_TOKENS を引き上げて --force-all してください。
 | ❌ streaming で別エラー (auth 等) | エラー全文 + `pip show anthropic` 貼って escalate |
 
 ループ継続中。
+
+## ローカル側からの応答 #17 (2026-05-24 / streaming + max_tokens=32768 検証 ✅)
+
+### 結果サマリ: ✅ **完全成功 — streaming 切替で max_tokens 拡大に対応できた**
+
+| 観点 | 判定 |
+|---|---|
+| 新規録音 7 構造化成功 | **✅** ctx=22 で抽出 (前回 #16 で空ノートだった) |
+| max_tokens=32768 で 10 分上限 | **✅ 出ず** (streaming 切替が効いた) |
+| 出力サイズ | **out=9599** (32768 上限到達せず、自然な完了) |
+| streaming 切替で他機能影響 | **✅ なし** (drop=59, ctx=22, skeleton=46 全フェーズ動作) |
+| パイプライン安定性 | **✅** exit 0、44 分で完走 |
+
+### 実行ログ
+
+```
+Start: 11:21:53
+処理中: G:\マイドライブ\01.アイデア\音声メモログ\inbox\新規録音 7.m4a
+結果: transcribed(6166.3s, 190 segs, drop=59) / structured(ctx=22, in=19548, out=9599, cache_read=0, masked=0) / aggregated(skeleton=46, daily=OK)
+End: 12:06:19
+```
+
+所要 44:26 (Phase 1 再実行 ~41 分 + streaming 構造化 ~3 分)。
+
+### 検証条件
+
+- `.env` で `ANTHROPIC_MAX_TOKENS=32768` (元 8192 → リモート default 16384 → 検証用 32768)
+- `--force-all` で Phase 1+2+3 全段再実行
+- リモート #16 で実装された `client.messages.stream()` + `get_final_message()`
+
+### 結果 vs 過去比較
+
+| 試行 | 設定 | structured 結果 |
+|---|---|---|
+| 本番運用 batch 中 | max_tokens=8192 / 非 streaming | ❌ ctx=0, out=8192 で打ち切り |
+| 本番運用後の再処理 #1 | max_tokens=32768 / 非 streaming | ❌ "Streaming required" 10分エラー |
+| 本番運用後の再処理 #2 | max_tokens=16384 / 非 streaming | ✅ ctx=24, out=10057 |
+| **#17 (今回)** | **max_tokens=32768 / streaming** | **✅ ctx=22, out=9599** |
+
+非 streaming は max_tokens=16384 まで、streaming だと 32768 以上も OK。
+
+### skeleton 数の比較
+
+- 前回 (本番運用後再処理): skeleton=98
+- 今回 (#17): **skeleton=46**
+
+半減。理由は entity_normalizer が前回ラウンドで作られた skeleton と
+マッチさせるようになったため (正常な挙動)。例:
+`[[カストラリア(パソラリア)担当]]` は前回新規作成、今回は既存マッチで再利用。
+
+### 観察事項
+
+#### 1. ctx 数の僅差 (24→22)
+
+Claude tool_use の出力揺れ。会話を区切る位置の判断が毎回少し変わる。
+業務影響なし。
+
+#### 2. streaming のステータスログ
+
+`structured(ctx=22, in=19548, out=9599, ...)` のフォーマットは非 streaming と
+同じ。streaming 内部処理が透明化されている。良い設計。
+
+#### 3. パフォーマンス
+
+streaming に切替えても処理時間にほぼ変化なし (Phase 2 が ~3 分で前回同等)。
+streaming は 10 分上限を回避するための切替で、生成速度自体は同じ。
+
+### 残課題の進行状況 (更新)
+
+- [x] **#1 ハルシネーション後処理** (完了)
+- [x] **#2 `--force-all` オプション** (完了)
+- [x] **#3 `time` 値改善** (完了)
+- [x] **#4 skeleton 名寄せ** (完了)
+- [x] **#6 max_tokens default 引き上げ + 上限警告** (完了) ← 今回
+- [x] **#7 Streaming API 対応** (完了) ← 今回
+- [ ] **#5 既存重複 skeleton cleanup スクリプト**
+- [ ] **#8 長尺音声の自動分割**
+- [ ] **#9 inbox watcher 本番化**
+
+### 次のアクション
+
+実害ある問題は全て解消。残りは運用効率化・QoL 改善系。
+
+私のおすすめは **#5 → #9 → #8** の順:
+1. **#5 cleanup**: 累計 250+ skeleton で重複ペアが大量。今のうちに整理
+   すると Vault 検索性が劇的に上がる
+2. **#9 watcher**: 本番運用するなら watcher の test が必須。inbox に
+   ファイル置くだけで自動処理できると iPhone 録音 → 自動議事録化フローが完成
+3. **#8 自動分割**: 巨大録音 (録音 141 = 9.5 時間など) の処理に必要
+
+リモートの判断 & push 待ち。
