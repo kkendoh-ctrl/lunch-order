@@ -1596,6 +1596,9 @@ async function runAll(jobs, existingRun) {
           logRow("―", "ng", "クォータ超過のため中断しました", "残り " + (jobs.length - i - 1) + " 件は作成していません");
           run.items.push(item);
           save();
+          done++;
+          setProgress(done, jobs.length);
+          $("#logCount").textContent = "成功 " + ok + " / 失敗 " + ng;
           break;
         }
       }
