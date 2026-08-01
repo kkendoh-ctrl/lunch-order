@@ -210,6 +210,8 @@ input:focus, textarea:focus, select:focus { outline:none; border-color:var(--shu
   margin-bottom:9px; background:var(--paper-2);
 }
 .match-item.off { opacity:.45; }
+.match-item.mine { border-color:var(--karashi); box-shadow:inset 3px 0 0 var(--karashi); }
+.match-no.mine { background:var(--karashi); color:var(--sumi); }
 .match-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
 .match-no {
   width:26px; height:26px; border-radius:50%; background:var(--shu); color:#fff;
@@ -390,11 +392,25 @@ code { font-family:var(--mono); background:var(--washi-warm); padding:1px 5px; b
   </div>
 
   <div class="card">
+    <h2 class="section-title"><span class="deco">陣</span>チーム名簿<span class="count" id="teamCount">0チーム</span></h2>
+    <div class="field">
+      <label class="field-label" for="fTeams">参加チーム<span class="opt">1行1チーム</span></label>
+      <textarea id="fTeams" placeholder="チーム名を1行ずつ"></textarea>
+      <div class="hint">試合表の「チームA / チームB」欄で、ここに入れた名前が入力候補として出ます。</div>
+    </div>
+    <div class="field">
+      <label class="field-label" for="fMyTeam">自分のチーム<span class="opt">任意</span></label>
+      <select id="fMyTeam"></select>
+      <div class="hint">自分のチームが出る試合に★が付き、「自分の試合だけON」でその試合だけ作成対象にできます。</div>
+    </div>
+  </div>
+
+  <div class="card">
     <h2 class="section-title"><span class="deco">名</span>タイトルと説明文</h2>
     <div class="field">
       <label class="field-label" for="fTitleTpl">タイトルの書式</label>
       <input type="text" id="fTitleTpl" placeholder="{試合名} {対戦}">
-      <div class="hint">使える差し込み：<code>{大会名}</code> <code>{試合名}</code> <code>{対戦}</code> <code>{A}</code> <code>{B}</code> <code>{番号}</code> <code>{日付}</code> <code>{時刻}</code></div>
+      <div class="hint">使える差し込み：<code>{大会名}</code> <code>{試合名}</code> <code>{対戦}</code> <code>{A}</code> <code>{B}</code> <code>{番号}</code> <code>{コート}</code> <code>{日付}</code> <code>{時刻}</code></div>
     </div>
     <div class="field">
       <label class="field-label" for="fDescTpl">説明文の書式<span class="opt">任意</span></label>
@@ -470,7 +486,24 @@ code { font-family:var(--mono); background:var(--washi-warm); padding:1px 5px; b
 <!-- ============ 試合表 ============ -->
 <section class="view" id="view-matches">
   <div class="card">
-    <h2 class="section-title"><span class="deco">生</span>試合表を作る</h2>
+    <h2 class="section-title"><span class="deco">表</span>大会プリセットから作る</h2>
+    <div class="banner info"><span class="ic">📋</span><div>
+      <b>ペアモル甲子園〜夏物語2026〜</b>（2026/8/2）の対戦表を取り込み済みです。
+      予選は9:30から20分間隔で15試合、Aブロックが第1〜8コート、Bブロックが第9〜16コートです。</div></div>
+    <div class="field">
+      <label class="field-label" for="fPreset">取り込む範囲</label>
+      <select id="fPreset"></select>
+    </div>
+    <div class="switch">
+      <div class="switch-label">決勝トーナメントも入れる<small>1回戦14:50／準々決勝15:20／準決勝15:50／決勝16:30の4試合。対戦カードは未定なので空欄で入ります。</small></div>
+      <button class="switch-toggle on" id="tgPresetFinals" role="switch" aria-checked="true"></button>
+    </div>
+    <button class="btn btn-primary" id="btnLoadPreset" style="margin-top:6px">この範囲で試合表を作る</button>
+    <div class="hint">いま入っている試合表は置きかえられます。大会名・開催日・間隔もプリセットの値に合わせます。</div>
+  </div>
+
+  <div class="card">
+    <h2 class="section-title"><span class="deco">生</span>試合表を作る<span class="count">プリセットを使わない場合</span></h2>
     <div class="grid-2">
       <div class="field">
         <label class="field-label" for="fQualCount">予選の試合数</label>
@@ -506,6 +539,10 @@ code { font-family:var(--mono); background:var(--washi-warm); padding:1px 5px; b
     </h2>
     <ul class="match-list" id="matchList"></ul>
     <div class="btn-row" style="margin-top:10px">
+      <button class="btn btn-ghost btn-small" id="btnOnlyMine">自分の試合だけON</button>
+      <button class="btn btn-ghost btn-small" id="btnAllOn">全部ON</button>
+    </div>
+    <div class="btn-row" style="margin-top:8px">
       <button class="btn btn-ghost btn-small" id="btnAddRow">1試合ふやす</button>
       <button class="btn btn-danger btn-small" id="btnClearRows">全部消す</button>
     </div>
@@ -650,6 +687,7 @@ code { font-family:var(--mono); background:var(--washi-warm); padding:1px 5px; b
   </div>
 </div>
 
+<datalist id="teamList"></datalist>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -668,6 +706,69 @@ const API = "https://www.googleapis.com/youtube/v3/";
 const UPLOAD_API = "https://www.googleapis.com/upload/youtube/v3/";
 const DAILY_QUOTA = 10000;
 const COST = { broadcast: 50, thumbnail: 50, playlist: 50, playlistItem: 50 };
+/* -------------------------------------------------------------------------
+   大会プリセット：ペアモル甲子園〜夏物語2026〜（2026/8/2 沼南駅高架下）
+   大会スプレッドシートの対戦表をそのまま持ってきたもの。
+   キーは抽選番号。1〜16がAブロック（第1〜8コート）、17〜32がBブロック（第9〜16コート）。
+   ------------------------------------------------------------------------- */
+const T2026_TEAMS = {
+  1: "MCどんぐり", 2: "ディア・ナノモッテ", 3: "埼玉と千葉", 4: "ブラッキーズ98",
+  5: "solmio", 6: "たまつう", 7: "池袋ウッドペッカーズ", 8: "もるもと木材",
+  9: "つぶ貝スパゲッティ", 10: "チェリー", 11: "SIXEN344", 12: "SMA",
+  13: "GRIFFON", 14: "浦安神頼み", 15: "桜台ネイバーズ1", 16: "たいみぃ",
+  17: "男祭り2026", 18: "わっしょいモルック", 19: "YouTuber", 20: "MMコンビ",
+  21: "ムラキ〜ズ", 22: "大宮モックル", 23: "YG", 24: "ブルベル67",
+  25: "七転び八起き～ず", 26: "梅アッズーリ", 27: "SAKURAN333マヨネーズ", 28: "NOLLA",
+  29: "ゆうやん大好き同好会", 30: "Sixen233-2", 31: "pocheecom", 32: "SAKURAN333サ飯"
+};
+// 予選15試合ぶん、各行が第1〜第8コートの対戦（抽選番号のペア）
+const T2026_A = [
+  [[5,6],[3,4],[1,2],[7,8],[9,10],[11,12],[15,16],[13,14]],
+  [[5,2],[9,6],[7,4],[13,10],[1,3],[11,8],[15,12],[16,14]],
+  [[15,8],[9,2],[13,6],[14,12],[7,3],[1,5],[16,10],[11,4]],
+  [[13,2],[16,6],[15,4],[9,5],[12,10],[1,7],[11,3],[14,8]],
+  [[16,2],[11,7],[10,8],[13,5],[1,9],[14,4],[15,3],[12,6]],
+  [[1,11],[10,4],[12,2],[15,7],[13,9],[14,3],[8,6],[16,5]],
+  [[12,5],[14,7],[6,4],[15,11],[8,2],[10,3],[1,13],[16,9]],
+  [[1,15],[6,3],[16,13],[12,9],[10,7],[8,5],[14,11],[4,2]],
+  [[2,3],[4,5],[8,9],[6,7],[10,11],[14,15],[12,13],[1,16]],
+  [[2,7],[10,15],[4,9],[6,11],[12,16],[8,13],[3,5],[1,14]],
+  [[10,14],[6,15],[5,7],[4,13],[2,11],[8,16],[3,9],[1,12]],
+  [[3,13],[4,16],[5,11],[7,9],[1,10],[8,12],[6,14],[2,15]],
+  [[7,13],[4,12],[5,15],[3,16],[1,8],[6,10],[9,11],[2,14]],
+  [[9,15],[1,6],[7,16],[3,12],[2,10],[5,14],[4,8],[11,13]],
+  [[9,14],[11,16],[1,4],[5,10],[2,6],[7,12],[13,15],[3,8]]
+];
+// 同じく、各行が第9〜第16コートの対戦
+const T2026_B = [
+  [[21,22],[19,20],[17,18],[23,24],[25,26],[27,28],[31,32],[29,30]],
+  [[21,18],[25,22],[23,20],[29,26],[17,19],[27,24],[31,28],[32,30]],
+  [[31,24],[25,18],[29,22],[30,28],[23,19],[17,21],[32,26],[27,20]],
+  [[29,18],[32,22],[31,20],[25,21],[28,26],[17,23],[27,19],[30,24]],
+  [[32,18],[27,23],[26,24],[29,21],[17,25],[30,20],[31,19],[28,22]],
+  [[17,27],[26,20],[28,18],[31,23],[29,25],[30,19],[24,22],[32,21]],
+  [[28,21],[30,23],[22,20],[31,27],[24,18],[26,19],[17,29],[32,25]],
+  [[17,31],[22,19],[32,29],[28,25],[26,23],[24,21],[30,27],[20,18]],
+  [[18,19],[20,21],[24,25],[22,23],[26,27],[30,31],[28,29],[17,32]],
+  [[18,23],[26,31],[20,25],[22,27],[28,32],[24,29],[19,21],[17,30]],
+  [[26,30],[22,31],[21,23],[20,29],[18,27],[24,32],[19,25],[17,28]],
+  [[19,29],[20,32],[21,27],[23,25],[17,26],[24,28],[22,30],[18,31]],
+  [[23,29],[20,28],[21,31],[19,32],[17,24],[22,26],[25,27],[18,30]],
+  [[25,31],[17,22],[23,32],[19,28],[18,26],[21,30],[20,24],[27,29]],
+  [[25,30],[27,32],[17,20],[21,26],[18,22],[23,28],[29,31],[19,24]]
+];
+const T2026 = {
+  name: "ペアモル甲子園〜夏物語2026〜",
+  date: "2026-08-02",
+  firstStart: "09:30",
+  interval: 20,
+  finals: [
+    ["決勝T1回戦", "14:50"], ["決勝T準々決勝", "15:20"],
+    ["決勝T準決勝", "15:50"], ["決勝T決勝戦", "16:30"]
+  ]
+};
+const PRESET_TEAMS = Object.keys(T2026_TEAMS)
+  .sort((a, b) => a - b).map((k) => T2026_TEAMS[k]);
 const FINAL_ROUNDS = [
   { key: "r1",  label: "1回戦",   name: "決勝T1回戦" },
   { key: "qf",  label: "準々決勝", name: "決勝T準々決勝" },
@@ -685,6 +786,7 @@ const defaults = () => ({
     plMode: "new", plTitle: "", plId: "",
     qualCount: 15, qualTpl: "予選第{n}試合",
     finals: { r1: true, qf: true, sf: true, f: true },
+    teams: PRESET_TEAMS.slice(), myTeam: "浦安神頼み",
     theme: "auto"
   },
   matches: [],
@@ -783,6 +885,7 @@ function fillTpl(tpl, m, idx) {
     "{A}": (m.a || "").trim(),
     "{B}": (m.b || "").trim(),
     "{番号}": String(idx + 1),
+    "{コート}": m.court ? "第" + m.court + "コート" : "",
     "{日付}": d ? fmtDate(d) : "",
     "{時刻}": d ? fmtTime(d) : ""
   };
@@ -991,8 +1094,10 @@ function dataUrlToBlob(dataUrl) {
 /* =========================================================================
    試合表
    ========================================================================= */
-function newMatch(name, a, b, at) {
-  return { id: nextId(), name: name || "", a: a || "", b: b || "", at: at || "", on: true };
+function newMatch(name, a, b, at, court) {
+  const m = { id: nextId(), name: name || "", a: a || "", b: b || "", at: at || "", on: true };
+  if (court) m.court = court;
+  return m;
 }
 function baseDate() {
   const cfg = state.cfg;
@@ -1026,6 +1131,76 @@ function generateMatches() {
   renderMatches();
   toast(list.length + "試合の表を作りました");
 }
+/* ---------- 大会プリセット ---------- */
+function presetOptions() {
+  const opts = [{ v: "mine", t: "自分のチームの試合（予選15試合）" }];
+  for (let i = 0; i < 8; i++) opts.push({ v: "A" + i, t: "Aブロック 第" + (i + 1) + "コート（15試合）" });
+  for (let i = 0; i < 8; i++) opts.push({ v: "B" + i, t: "Bブロック 第" + (i + 9) + "コート（15試合）" });
+  opts.push({ v: "allA", t: "Aブロック全部（120試合）" });
+  opts.push({ v: "allB", t: "Bブロック全部（120試合）" });
+  opts.push({ v: "all", t: "全試合（240試合・クォータ超過に注意）" });
+  return opts;
+}
+function presetStart(round) {
+  const t = T2026.firstStart.split(":");
+  const d = new Date(T2026.date + "T00:00:00");
+  d.setHours(Number(t[0]), Number(t[1]) + T2026.interval * round, 0, 0);
+  return toLocalInput(d);
+}
+function presetAt(hhmm) {
+  const t = hhmm.split(":");
+  const d = new Date(T2026.date + "T00:00:00");
+  d.setHours(Number(t[0]), Number(t[1]), 0, 0);
+  return toLocalInput(d);
+}
+function presetRow(round, pair, court) {
+  return newMatch("予選第" + (round + 1) + "試合",
+    T2026_TEAMS[pair[0]], T2026_TEAMS[pair[1]], presetStart(round), court);
+}
+function buildPreset(mode, withFinals) {
+  const list = [];
+  const addBlock = (sched, courtBase, courtIdx) => {
+    sched.forEach((round, r) => {
+      round.forEach((pair, c) => {
+        if (courtIdx != null && c !== courtIdx) return;
+        list.push(presetRow(r, pair, courtBase + c));
+      });
+    });
+  };
+
+  if (mode === "mine") {
+    const my = (state.cfg.myTeam || "").trim();
+    const no = Number(Object.keys(T2026_TEAMS).find((k) => T2026_TEAMS[k] === my));
+    if (!no) return null;
+    const inA = no <= 16;
+    const sched = inA ? T2026_A : T2026_B;
+    const base = inA ? 1 : 9;
+    sched.forEach((round, r) => {
+      round.forEach((pair, c) => {
+        if (pair[0] === no || pair[1] === no) list.push(presetRow(r, pair, base + c));
+      });
+    });
+  } else if (mode[0] === "A" && mode.length > 1 && mode !== "allA") {
+    addBlock(T2026_A, 1, Number(mode.slice(1)));
+  } else if (mode[0] === "B" && mode.length > 1 && mode !== "allB") {
+    addBlock(T2026_B, 9, Number(mode.slice(1)));
+  } else if (mode === "allA") {
+    addBlock(T2026_A, 1, null);
+  } else if (mode === "allB") {
+    addBlock(T2026_B, 9, null);
+  } else {
+    addBlock(T2026_A, 1, null);
+    addBlock(T2026_B, 9, null);
+  }
+
+  // 同じ開始時刻のものが並ぶので、時刻→コートの順に整える
+  list.sort((x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : (x.court || 0) - (y.court || 0)));
+  if (withFinals) {
+    T2026.finals.forEach((f) => list.push(newMatch(f[0], "", "", presetAt(f[1]), 0)));
+  }
+  return list;
+}
+
 function parsePasted(text) {
   return String(text || "").split(/\r?\n/)
     .map((l) => l.trim())
@@ -1037,6 +1212,11 @@ function parsePasted(text) {
 }
 function activeMatches() {
   return state.matches.filter((m) => m.on && (m.name || m.a || m.b));
+}
+function isMine(m) {
+  const my = (state.cfg.myTeam || "").trim();
+  if (!my) return false;
+  return (m.a || "").trim() === my || (m.b || "").trim() === my;
 }
 
 /* =========================================================================
@@ -1053,16 +1233,17 @@ function renderMatches() {
       const over = title.length > 100;
       const d = parseLocalInput(m.at);
       const past = d && d.getTime() < Date.now();
-      return '<li class="match-item' + (m.on ? "" : " off") + '" data-id="' + m.id + '">' +
+      const mine = isMine(m);
+      return '<li class="match-item' + (m.on ? "" : " off") + (mine ? " mine" : "") + '" data-id="' + m.id + '">' +
         '<div class="match-head">' +
-          '<span class="match-no">' + (i + 1) + '</span>' +
+          '<span class="match-no' + (mine ? " mine" : "") + '">' + (mine ? "★" : (i + 1)) + '</span>' +
           '<input type="text" data-f="name" value="' + esc(m.name) + '" placeholder="試合名（例：予選第1試合）">' +
           '<button class="icon-btn' + (m.on ? " on" : "") + '" data-act="toggle" title="この試合を作る/作らない">' + (m.on ? "✓" : "―") + '</button>' +
         '</div>' +
         '<div class="match-vs">' +
-          '<input type="text" data-f="a" value="' + esc(m.a) + '" placeholder="チームA">' +
+          '<input type="text" list="teamList" data-f="a" value="' + esc(m.a) + '" placeholder="チームA">' +
           '<span class="vs">vs</span>' +
-          '<input type="text" data-f="b" value="' + esc(m.b) + '" placeholder="チームB">' +
+          '<input type="text" list="teamList" data-f="b" value="' + esc(m.b) + '" placeholder="チームB">' +
         '</div>' +
         '<div class="match-foot">' +
           '<input type="datetime-local" data-f="at" value="' + esc(m.at) + '">' +
@@ -1197,6 +1378,18 @@ function renderRuns() {
   badge.classList.toggle("show", state.runs.length > 0);
 }
 
+function renderTeams() {
+  const teams = state.cfg.teams || [];
+  $("#teamCount").textContent = teams.length + "チーム";
+  $("#teamList").innerHTML = teams.map((t) => '<option value="' + esc(t) + '"></option>').join("");
+  const my = state.cfg.myTeam || "";
+  const known = teams.indexOf(my) >= 0;
+  $("#fMyTeam").innerHTML = '<option value="">（未設定）</option>' +
+    (my && !known ? '<option value="' + esc(my) + '">' + esc(my) + '（名簿にありません）</option>' : "") +
+    teams.map((t) => '<option value="' + esc(t) + '">' + esc(t) + '</option>').join("");
+  $("#fMyTeam").value = my;
+}
+
 function renderThumb() {
   const prev = $("#thumbPrev"), meta = $("#thumbMeta");
   if (state.thumb) {
@@ -1228,6 +1421,8 @@ function renderConfig() {
   $("#fQualTpl").value = c.qualTpl;
   $("#fLatency").value = c.latency;
   $("#fClientId").value = c.clientId;
+  $("#fTeams").value = (c.teams || []).join("\n");
+  renderTeams();
   setToggle($("#tgKids"), c.madeForKids);
   setToggle($("#tgAutoStart"), c.autoStart);
   setToggle($("#tgAutoStop"), c.autoStop);
@@ -1579,6 +1774,16 @@ function bind() {
     save();
   });
 
+  // ---- チーム名簿 ----
+  $("#fTeams").addEventListener("input", (e) => {
+    state.cfg.teams = e.target.value.split(/\r?\n/).map((t) => t.trim()).filter(Boolean);
+    save(); renderTeams();
+  });
+  $("#fMyTeam").addEventListener("change", (e) => {
+    state.cfg.myTeam = e.target.value;
+    save(); renderMatches();
+  });
+
   // ---- サムネイル ----
   $("#btnThumbPick").addEventListener("click", () => $("#fThumb").click());
   $("#btnThumbClear").addEventListener("click", () => {
@@ -1598,9 +1803,49 @@ function bind() {
     e.target.value = "";
   });
 
+  // ---- 大会プリセット ----
+  $("#fPreset").innerHTML = presetOptions()
+    .map((o) => '<option value="' + o.v + '">' + esc(o.t) + '</option>').join("");
+  $("#tgPresetFinals").addEventListener("click", (e) => {
+    const on = !e.currentTarget.classList.contains("on");
+    setToggle(e.currentTarget, on);
+  });
+  $("#btnLoadPreset").addEventListener("click", () => {
+    const mode = $("#fPreset").value;
+    const withFinals = $("#tgPresetFinals").classList.contains("on");
+    const list = buildPreset(mode, withFinals);
+    if (!list) {
+      toast("大会設定で「自分のチーム」を名簿から選んでください");
+      showView("tourney");
+      return;
+    }
+    state.cfg.tourney = state.cfg.tourney.trim() || T2026.name;
+    state.cfg.date = T2026.date;
+    state.cfg.startTime = T2026.firstStart;
+    state.cfg.interval = T2026.interval;
+    state.matches = list;
+    save();
+    renderConfig();
+    renderMatches();
+    toast(list.length + "試合を取り込みました");
+  });
+
   // ---- 試合表 ----
   $("#btnGenerate").addEventListener("click", generateMatches);
   $("#btnRetime").addEventListener("click", () => { if (retime()) { save(); renderMatches(); toast("時刻を振り直しました"); } });
+  $("#btnOnlyMine").addEventListener("click", () => {
+    if (!(state.cfg.myTeam || "").trim()) { toast("大会設定で「自分のチーム」を選んでください"); return; }
+    const n = state.matches.filter(isMine).length;
+    if (!n) { toast("自分のチームが入っている試合がありません"); return; }
+    state.matches.forEach((m) => { m.on = isMine(m); });
+    save(); renderMatches();
+    toast(n + "試合だけONにしました");
+  });
+  $("#btnAllOn").addEventListener("click", () => {
+    state.matches.forEach((m) => { m.on = true; });
+    save(); renderMatches();
+    toast("全部ONにしました");
+  });
   $("#btnAddRow").addEventListener("click", () => {
     const last = state.matches[state.matches.length - 1];
     let at = "";
@@ -1647,6 +1892,12 @@ function bind() {
     pv.innerHTML = '<span class="tt">' + (title ? esc(title) : "（タイトルが空です）") + '</span>' +
       (title.length > 100 ? ' <span class="over">← ' + title.length + '文字（100文字まで）</span>' : "") +
       (past ? ' <span class="over">← 過去の時刻</span>' : "");
+    // 入力中に再描画するとフォーカスが飛ぶので、★の表示だけその場で更新する
+    const mine = isMine(m);
+    const no = li.querySelector(".match-no");
+    li.classList.toggle("mine", mine);
+    no.classList.toggle("mine", mine);
+    no.textContent = mine ? "★" : String(idx + 1);
     renderPreflight();
   });
   $("#matchList").addEventListener("click", (e) => {
