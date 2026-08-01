@@ -458,18 +458,26 @@ code { font-family:var(--mono); background:var(--washi-warm); padding:1px 5px; b
 
   <div class="card">
     <h2 class="section-title"><span class="deco">細</span>配信の詳細設定</h2>
+    <div class="banner info"><span class="ic">📱</span><div>
+      PRISM Live から配信するなら、<b>PRISM Live 向けの設定</b>を押しておくと迷いません。
+      当日は PRISM の CONNECT で YouTube につなぎ、ここで作った配信枠を選ぶだけです。</div></div>
+    <button class="btn btn-ghost btn-small" id="btnPrismPreset" style="margin-bottom:12px">PRISM Live 向けの設定にする</button>
     <div class="switch">
       <div class="switch-label">子ども向けコンテンツ<small>いいえ（既定）のままで問題なければ触らなくて大丈夫です。</small></div>
       <button class="switch-toggle" id="tgKids" role="switch" aria-checked="false"></button>
     </div>
     <hr class="divider">
     <div class="switch">
-      <div class="switch-label">開始時刻に自動で配信を開始<small>エンコーダーから映像が届いていれば自動で開始します。</small></div>
+      <div class="switch-label">映像が届いたら自動で配信を開始<small>PRISM で「配信開始」を押した時点で、そのまま本番が始まります。</small></div>
       <button class="switch-toggle" id="tgAutoStart" role="switch" aria-checked="false"></button>
     </div>
     <div class="switch">
-      <div class="switch-label">映像が止まったら自動で終了<small>自動開始と合わせて使うと運用が楽になります。</small></div>
+      <div class="switch-label">映像が止まったら自動で終了<small>電波が切れただけでも終了してしまうので、屋外ではOFF推奨です。</small></div>
       <button class="switch-toggle" id="tgAutoStop" role="switch" aria-checked="false"></button>
+    </div>
+    <div class="switch">
+      <div class="switch-label">モニター（テスト配信）を使う<small>OFFにすると「テスト中」の一段階がなくなり、映像が届いたらすぐ本番になります。自動開始をONにすると自動でOFFになります。</small></div>
+      <button class="switch-toggle on" id="tgMonitor" role="switch" aria-checked="true"></button>
     </div>
     <div class="field" style="margin-top:10px">
       <label class="field-label" for="fLatency">遅延設定</label>
@@ -646,6 +654,18 @@ code { font-family:var(--mono); background:var(--washi-warm); padding:1px 5px; b
         </ol>
       </div>
       <div class="help-block">
+        <h4>PRISM Live から配信する場合</h4>
+        <p>このページは<b>配信枠を先に作っておくだけ</b>で、配信そのものは PRISM Live から行います。</p>
+        <ol>
+          <li>前日までに、このページで全試合ぶんの配信枠を作る</li>
+          <li>「PRISM Live 向けの設定にする」を押してから作ると、テスト配信の一段階がなくなる</li>
+          <li>当日、PRISM Live で <b>LIVE → CONNECT</b> から YouTube に接続</li>
+          <li>作っておいた<b>配信予定の一覧から、その試合の枠を選ぶ</b></li>
+          <li>配信開始。タイトル・サムネイル・再生リストは設定済みなので、毎回入力しなくていい</li>
+        </ol>
+        <p>試合ごとに枠を選び直すので、タイトルは一覧で見分けやすい書式にしておくのがおすすめです。</p>
+      </div>
+      <div class="help-block">
         <h4>知っておくこと</h4>
         <ul>
           <li>チャンネルで<b>ライブ配信が有効</b>になっている必要があります（有効化に24時間かかる場合あり）。</li>
@@ -653,6 +673,7 @@ code { font-family:var(--mono); background:var(--washi-warm); padding:1px 5px; b
           <li>開始予定時刻は<b>未来の時刻</b>である必要があります。</li>
           <li>カスタムサムネイルにはチャンネルの電話番号確認が必要です。</li>
           <li>ログインの有効期限は約1時間です。切れたら再度ログインしてください。</li>
+          <li>本番前に、まず<b>限定公開で1件だけ</b>作って PRISM から選べるか試してください。</li>
         </ul>
       </div>
     </div>
@@ -780,7 +801,8 @@ const FINAL_ROUNDS = [
 const defaults = () => ({
   cfg: {
     clientId: "", tourney: "", date: "", startTime: "09:00", interval: 30,
-    privacy: "public", madeForKids: false, autoStart: false, autoStop: false, latency: "",
+    privacy: "public", madeForKids: false, autoStart: false, autoStop: false,
+    monitor: true, latency: "",
     titleTpl: "{試合名} {対戦}",
     descTpl: "{大会名}\n{日付} {時刻}〜\n{試合名}　{対戦}",
     plMode: "new", plTitle: "", plId: "",
@@ -1054,6 +1076,8 @@ function createBroadcast(title, description, startISO) {
   if (cfg.autoStart) cd.enableAutoStart = true;
   if (cfg.autoStop) cd.enableAutoStop = true;
   if (cfg.latency) cd.latencyPreference = cfg.latency;
+  // 自動開始はテスト配信と併用できないので、その場合はモニターを切る
+  if (!cfg.monitor || cfg.autoStart) cd.monitorStream = { enableMonitorStream: false };
   if (Object.keys(cd).length) { body.contentDetails = cd; parts.push("contentDetails"); }
 
   return call("POST", "liveBroadcasts", { params: { part: parts.join(",") }, json: body });
@@ -1426,6 +1450,7 @@ function renderConfig() {
   setToggle($("#tgKids"), c.madeForKids);
   setToggle($("#tgAutoStart"), c.autoStart);
   setToggle($("#tgAutoStop"), c.autoStop);
+  setToggle($("#tgMonitor"), c.monitor);
   syncPlaylistFields();
   $("#finalRounds").innerHTML = FINAL_ROUNDS.map((r) =>
     '<label style="display:inline-flex;align-items:center;gap:5px;margin:0 12px 6px 0;font-size:14px">' +
@@ -1766,6 +1791,13 @@ function bind() {
   bindToggle("#tgKids", "madeForKids");
   bindToggle("#tgAutoStart", "autoStart");
   bindToggle("#tgAutoStop", "autoStop");
+  bindToggle("#tgMonitor", "monitor");
+
+  $("#btnPrismPreset").addEventListener("click", () => {
+    Object.assign(state.cfg, { autoStart: true, autoStop: false, monitor: false, latency: "" });
+    save(); renderConfig();
+    toast("自動開始ON・自動終了OFF・モニターOFFにしました");
+  });
 
   $("#finalRounds").addEventListener("change", (e) => {
     const k = e.target.dataset.final;
