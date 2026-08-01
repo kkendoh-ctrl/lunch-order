@@ -1,0 +1,2090 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="auto">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#C53A28" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1a1612" media="(prefers-color-scheme: dark)">
+<meta name="description" content="大会の全試合ぶんのYouTube配信予約を、APIでまとめて作成する。">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="配信予約メーカー">
+<title>配信予約メーカー ‧ 大会の配信枠を一括作成</title>
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='28' fill='%23C53A28'/><text x='32' y='44' font-size='32' text-anchor='middle' fill='white' font-family='serif'>配</text></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='40' fill='%23C53A28'/><text x='90' y='128' font-size='110' text-anchor='middle' fill='white' font-family='serif'>配</text></svg>">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Yuji+Syuku&family=Shippori+Mincho+B1:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=DotGothic16&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
+<style>
+/* ============================================================
+   配信予約メーカー  v1.0
+   ============================================================ */
+:root, [data-theme="light"] {
+  --washi:#f3eada; --washi-warm:#faf3e1; --paper:#fff; --paper-2:#fbf6ec;
+  --sumi:#1f1a14; --sumi-soft:#4a4135; --sumi-faded:#8a7e6c;
+  --line:#d9cdb3; --line-soft:#ece2cc;
+  --shu:#c53a28; --shu-deep:#9b2718; --shu-soft:#f8e8e3;
+  --karashi:#d4a017; --karashi-soft:#fff7d8;
+  --wakatake:#5c8048; --wakatake-soft:#e3efd9;
+  --ai:#2a4a5c; --aka:#b22222;
+  --shadow-card:0 1px 0 rgba(31,26,20,.04),0 6px 18px -10px rgba(31,26,20,.18);
+  --shadow-soft:0 2px 8px rgba(31,26,20,.08);
+  --shadow-pop:0 12px 40px -8px rgba(31,26,20,.35);
+  --modal-bg:rgba(31,26,20,.55);
+}
+[data-theme="dark"] {
+  --washi:#1a1612; --washi-warm:#211c16; --paper:#2a241d; --paper-2:#322a22;
+  --sumi:#f0e6d4; --sumi-soft:#c4b89e; --sumi-faded:#837866;
+  --line:#3d352b; --line-soft:#2f2a22;
+  --shu:#e85a45; --shu-deep:#c53a28; --shu-soft:#3a201c;
+  --karashi:#e8b832; --karashi-soft:#3a3019;
+  --wakatake:#8aae6f; --wakatake-soft:#2a3422;
+  --ai:#6b8ca0; --aka:#e95650;
+  --shadow-card:0 1px 0 rgba(0,0,0,.3),0 8px 22px -10px rgba(0,0,0,.6);
+  --shadow-soft:0 2px 8px rgba(0,0,0,.4);
+  --shadow-pop:0 12px 40px -8px rgba(0,0,0,.7);
+  --modal-bg:rgba(0,0,0,.7);
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] {
+    --washi:#1a1612; --washi-warm:#211c16; --paper:#2a241d; --paper-2:#322a22;
+    --sumi:#f0e6d4; --sumi-soft:#c4b89e; --sumi-faded:#837866;
+    --line:#3d352b; --line-soft:#2f2a22;
+    --shu:#e85a45; --shu-deep:#c53a28; --shu-soft:#3a201c;
+    --karashi:#e8b832; --karashi-soft:#3a3019;
+    --wakatake:#8aae6f; --wakatake-soft:#2a3422;
+    --ai:#6b8ca0; --aka:#e95650;
+    --shadow-card:0 1px 0 rgba(0,0,0,.3),0 8px 22px -10px rgba(0,0,0,.6);
+    --shadow-soft:0 2px 8px rgba(0,0,0,.4);
+    --shadow-pop:0 12px 40px -8px rgba(0,0,0,.7);
+    --modal-bg:rgba(0,0,0,.7);
+  }
+}
+:root {
+  --display:"Yuji Syuku","Shippori Mincho B1",serif;
+  --gothic:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic UI",sans-serif;
+  --mono:"DotGothic16",monospace;
+  --tap:48px; --radius:12px;
+}
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+/* .btn などが display を持つと hidden 属性が効かなくなるため */
+[hidden] { display:none !important; }
+html,body { margin:0; padding:0; }
+body {
+  font-family:var(--gothic); background:var(--washi); color:var(--sumi);
+  font-size:16px; line-height:1.6; min-height:100vh; overflow-x:hidden;
+  position:relative; font-feature-settings:"palt";
+  padding-bottom:calc(40px + env(safe-area-inset-bottom));
+  transition:background-color .25s,color .25s;
+}
+body::before {
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='0.92' numOctaves='2'/><feColorMatrix values='0 0 0 0 0.1  0 0 0 0 0.08  0 0 0 0 0.05  0 0 0 0 0.07'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  opacity:.85; mix-blend-mode:multiply;
+}
+[data-theme="dark"] body::before { mix-blend-mode:screen; opacity:.35; }
+@media (prefers-color-scheme:dark){ [data-theme="auto"] body::before{ mix-blend-mode:screen; opacity:.35; } }
+main { position:relative; z-index:1; max-width:720px; margin:0 auto; padding:14px; }
+
+/* ---------- ヘッダー ---------- */
+.header {
+  position:sticky; top:0; z-index:50; padding-top:env(safe-area-inset-top);
+  background:var(--shu); color:#fff8e7; box-shadow:0 2px 10px -2px rgba(0,0,0,.18);
+}
+.header-inner { max-width:720px; margin:0 auto; padding:10px 14px 12px; display:flex; align-items:center; gap:12px; }
+.header-mark {
+  width:38px; height:38px; border-radius:50%; background:#fff8e7; color:var(--shu);
+  display:grid; place-items:center; font-family:var(--display); font-size:22px; flex-shrink:0;
+  box-shadow:inset 0 0 0 2px rgba(0,0,0,.1); animation:hankoIn .6s cubic-bezier(.2,1.5,.3,1) both;
+}
+@keyframes hankoIn { from{transform:scale(0) rotate(-30deg);opacity:0} to{transform:scale(1) rotate(0);opacity:1} }
+.header-title { font-size:17px; font-weight:700; letter-spacing:.08em; margin:0; line-height:1.2; }
+.header-sub { font-size:11px; opacity:.85; letter-spacing:.15em; margin-top:1px; }
+.header-status { margin-left:auto; display:flex; align-items:center; gap:8px; }
+.header-icon-btn {
+  background:transparent; border:1px solid rgba(255,255,255,.3); color:#fff8e7;
+  width:34px; height:34px; border-radius:50%; display:grid; place-items:center;
+  cursor:pointer; font-size:15px; padding:0; transition:background .15s;
+}
+.header-icon-btn:active { background:rgba(255,255,255,.15); }
+.header::after { content:""; display:block; height:6px; background:var(--shu); }
+
+/* ---------- タブ ---------- */
+.tabs { position:sticky; top:var(--header-h,66px); z-index:40; background:var(--washi-warm); border-bottom:1px solid var(--line); }
+.tabs-row { max-width:720px; margin:0 auto; display:flex; }
+.tab {
+  flex:1; padding:9px 4px 8px; background:none; border:none; cursor:pointer;
+  font-family:var(--gothic); font-size:11px; color:var(--sumi-faded); letter-spacing:.06em;
+  border-bottom:2.5px solid transparent; transition:color .15s,border-color .15s;
+}
+.tab .tab-icon { display:block; font-family:var(--display); font-size:18px; line-height:1.1; margin-bottom:2px; }
+.tab.active { color:var(--shu); border-bottom-color:var(--shu); font-weight:700; }
+.tab .tab-badge {
+  display:none; margin-left:3px; background:var(--shu); color:#fff; font-size:10px;
+  border-radius:8px; padding:0 5px; font-family:var(--gothic);
+}
+.tab .tab-badge.show { display:inline-block; }
+
+/* ---------- 基本パーツ ---------- */
+.view { display:none; animation:fadeUp .25s ease both; }
+.view.active { display:block; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+.card {
+  background:var(--paper); border:1px solid var(--line-soft); border-radius:var(--radius);
+  padding:16px; margin-bottom:14px; box-shadow:var(--shadow-card);
+}
+.section-title { display:flex; align-items:center; gap:8px; font-size:15px; font-weight:700; margin:0 0 12px; }
+.section-title .deco { font-family:var(--display); color:var(--shu); font-size:19px; line-height:1; }
+.section-title .count { font-size:12px; color:var(--sumi-faded); font-weight:400; }
+.section-title .right { margin-left:auto; }
+
+.btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  min-height:var(--tap); padding:12px 18px; border:none; border-radius:var(--radius);
+  font-family:var(--gothic); font-size:15px; font-weight:700; cursor:pointer;
+  box-shadow:var(--shadow-soft); transition:transform .1s,opacity .15s; width:100%;
+}
+.btn:active { transform:translateY(1px); }
+.btn:disabled { opacity:.45; cursor:not-allowed; }
+.btn-primary { background:var(--shu); color:#fff; }
+.btn-ghost { background:var(--paper); color:var(--sumi); border:1.5px solid var(--line); box-shadow:none; }
+.btn-danger { background:var(--paper); color:var(--aka); border:1.5px solid var(--aka); box-shadow:none; }
+.btn-success { background:var(--wakatake); color:#fff; }
+.btn-small { padding:9px 14px; font-size:14px; min-height:40px; }
+.btn-tiny { padding:6px 10px; font-size:12px; min-height:32px; border-radius:8px; width:auto; }
+.btn-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.btn-auto { width:auto; }
+
+.field { margin-bottom:12px; }
+.field:last-child { margin-bottom:0; }
+.field-label { display:flex; align-items:center; gap:5px; font-size:12px; font-weight:700; color:var(--sumi-soft); margin-bottom:5px; letter-spacing:.04em; }
+.field-label .opt { margin-left:auto; font-weight:400; color:var(--sumi-faded); font-size:11px; }
+input[type=text], input[type=number], input[type=date], input[type=time],
+input[type=datetime-local], input[type=url], textarea, select {
+  width:100%; padding:11px 12px; border:1.5px solid var(--line); border-radius:10px;
+  background:var(--paper-2); color:var(--sumi); font-family:var(--gothic); font-size:16px;
+  min-height:var(--tap); transition:border-color .15s,box-shadow .15s;
+}
+textarea { min-height:90px; line-height:1.7; resize:vertical; }
+input:focus, textarea:focus, select:focus { outline:none; border-color:var(--shu); box-shadow:0 0 0 3px var(--shu-soft); }
+.hint { font-size:11px; color:var(--sumi-faded); margin-top:4px; line-height:1.6; }
+.grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+@media (max-width:420px){ .grid-2 { grid-template-columns:1fr; } }
+
+.switch { display:flex; align-items:center; justify-content:space-between; padding:9px 0; gap:10px; }
+.switch-label { font-size:14px; flex:1; }
+.switch-label small { display:block; font-size:11px; color:var(--sumi-faded); margin-top:2px; line-height:1.5; }
+.switch-toggle {
+  width:46px; height:27px; border-radius:14px; background:var(--line); border:none;
+  position:relative; cursor:pointer; flex-shrink:0; transition:background .2s;
+}
+.switch-toggle::after {
+  content:""; position:absolute; top:3px; left:3px; width:21px; height:21px;
+  border-radius:50%; background:#fff; transition:transform .2s; box-shadow:0 1px 3px rgba(0,0,0,.3);
+}
+.switch-toggle.on { background:var(--wakatake); }
+.switch-toggle.on::after { transform:translateX(19px); }
+
+.divider { height:1px; background:var(--line-soft); margin:14px 0; border:none; }
+.muted { color:var(--sumi-faded); font-size:13px; }
+.mono { font-family:var(--mono); }
+
+.banner {
+  display:flex; gap:9px; align-items:flex-start; padding:11px 13px; border-radius:10px;
+  font-size:13px; line-height:1.65; margin-bottom:12px; border:1px solid;
+}
+.banner .ic { font-size:16px; line-height:1.4; flex-shrink:0; }
+.banner.warn { background:var(--karashi-soft); border-color:var(--karashi); color:var(--sumi); }
+.banner.ok { background:var(--wakatake-soft); border-color:var(--wakatake); color:var(--sumi); }
+.banner.err { background:var(--shu-soft); border-color:var(--shu); color:var(--sumi); }
+.banner.info { background:var(--paper-2); border-color:var(--line); color:var(--sumi-soft); }
+.banner b { font-weight:700; }
+
+/* ---------- 試合カード ---------- */
+.match-list { list-style:none; padding:0; margin:0; }
+.match-item {
+  border:1px solid var(--line-soft); border-radius:10px; padding:11px 12px;
+  margin-bottom:9px; background:var(--paper-2);
+}
+.match-item.off { opacity:.45; }
+.match-item.mine { border-color:var(--karashi); box-shadow:inset 3px 0 0 var(--karashi); }
+.match-no.mine { background:var(--karashi); color:var(--sumi); }
+.match-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.match-no {
+  width:26px; height:26px; border-radius:50%; background:var(--shu); color:#fff;
+  display:grid; place-items:center; font-size:12px; font-weight:700; flex-shrink:0;
+  font-variant-numeric:tabular-nums;
+}
+.match-head input[type=text] { min-height:38px; padding:7px 10px; font-size:14px; }
+.match-vs { display:grid; grid-template-columns:1fr auto 1fr; gap:6px; align-items:center; margin-bottom:8px; }
+.match-vs .vs { font-size:12px; color:var(--sumi-faded); font-weight:700; }
+.match-vs input { min-height:38px; padding:7px 10px; font-size:14px; }
+.match-foot { display:flex; gap:8px; align-items:center; }
+.match-foot input[type=datetime-local] { min-height:38px; padding:7px 10px; font-size:13px; flex:1; }
+.icon-btn {
+  width:34px; height:34px; border-radius:8px; border:1px solid var(--line);
+  background:var(--paper); color:var(--sumi-faded); cursor:pointer; flex-shrink:0;
+  display:grid; place-items:center; font-size:15px; padding:0;
+}
+.icon-btn:active { background:var(--washi-warm); }
+.icon-btn.danger:hover { color:var(--aka); border-color:var(--aka); }
+.icon-btn.on { color:var(--wakatake); border-color:var(--wakatake); background:var(--wakatake-soft); }
+.match-preview {
+  margin-top:8px; padding-top:8px; border-top:1px dashed var(--line);
+  font-size:12px; color:var(--sumi-soft); line-height:1.6; word-break:break-word;
+}
+.match-preview .tt { font-weight:700; color:var(--sumi); }
+.match-preview .over { color:var(--aka); }
+
+.empty { text-align:center; padding:26px 16px; color:var(--sumi-faded); }
+.empty-art { font-family:var(--display); font-size:36px; color:var(--line); margin-bottom:8px; }
+
+/* ---------- サムネ ---------- */
+.thumb-box { display:flex; gap:12px; align-items:flex-start; }
+.thumb-prev {
+  width:132px; aspect-ratio:16/9; border-radius:8px; border:1px solid var(--line);
+  background:var(--paper-2) center/cover no-repeat; flex-shrink:0;
+  display:grid; place-items:center; color:var(--sumi-faded); font-size:11px;
+}
+.thumb-meta { flex:1; min-width:0; font-size:12px; color:var(--sumi-soft); }
+.thumb-meta .fn { font-weight:700; color:var(--sumi); word-break:break-all; }
+
+/* ---------- 実行ログ ---------- */
+.progress { height:8px; border-radius:4px; background:var(--line-soft); overflow:hidden; margin:10px 0 6px; }
+.progress > i { display:block; height:100%; background:var(--shu); width:0; transition:width .25s; }
+.log-list { list-style:none; padding:0; margin:0; max-height:420px; overflow-y:auto; }
+.log-item {
+  display:flex; gap:9px; align-items:flex-start; padding:8px 2px;
+  border-bottom:1px solid var(--line-soft); font-size:13px; line-height:1.55;
+}
+.log-item:last-child { border-bottom:none; }
+.log-ic { flex-shrink:0; width:20px; text-align:center; font-size:13px; }
+.log-ic.ok { color:var(--wakatake); }
+.log-ic.ng { color:var(--aka); }
+.log-ic.run { color:var(--karashi); }
+.log-body { flex:1; min-width:0; word-break:break-word; }
+.log-body .t { font-weight:700; }
+.log-body .m { font-size:11px; color:var(--sumi-faded); margin-top:1px; }
+.log-body .m.err { color:var(--aka); }
+.log-body a { color:var(--ai); font-size:11px; }
+
+.stat-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
+.stat-card { background:var(--paper-2); border:1px solid var(--line-soft); border-radius:10px; padding:10px 6px; text-align:center; }
+.stat-card .stat-num { font-family:var(--display); font-size:22px; color:var(--shu); line-height:1.1; font-variant-numeric:tabular-nums; }
+.stat-card .stat-label { font-size:10px; color:var(--sumi-faded); margin-top:2px; letter-spacing:.06em; }
+
+/* ---------- 履歴 ---------- */
+.run-card { border:1px solid var(--line-soft); border-radius:10px; padding:12px; margin-bottom:10px; background:var(--paper-2); }
+.run-top { display:flex; align-items:baseline; gap:8px; margin-bottom:4px; }
+.run-top .rt { font-weight:700; font-size:14px; flex:1; min-width:0; word-break:break-word; }
+.run-top .rd { font-size:11px; color:var(--sumi-faded); white-space:nowrap; }
+.run-meta { font-size:12px; color:var(--sumi-soft); margin-bottom:9px; }
+.run-actions { display:flex; gap:6px; flex-wrap:wrap; }
+.badge { font-size:10px; padding:2px 7px; border-radius:10px; font-weight:700; white-space:nowrap; }
+.badge.green { background:var(--wakatake-soft); color:var(--wakatake); }
+.badge.red { background:var(--shu-soft); color:var(--shu); }
+.badge.gray { background:var(--line-soft); color:var(--sumi-faded); }
+
+/* ---------- モーダル・トースト ---------- */
+.modal-bg {
+  position:fixed; inset:0; background:var(--modal-bg); z-index:900;
+  display:none; align-items:center; justify-content:center; padding:16px;
+  backdrop-filter:blur(2px);
+}
+.modal-bg.show { display:flex; }
+.modal {
+  background:var(--paper); border-radius:16px; width:100%; max-width:520px;
+  max-height:88vh; overflow-y:auto; box-shadow:var(--shadow-pop);
+  animation:popIn .2s cubic-bezier(.2,1.3,.4,1) both;
+}
+@keyframes popIn { from{opacity:0;transform:scale(.95) translateY(10px)} to{opacity:1;transform:none} }
+.modal-header { display:flex; align-items:center; gap:8px; padding:14px 16px; border-bottom:1px solid var(--line-soft); position:sticky; top:0; background:var(--paper); border-radius:16px 16px 0 0; }
+.modal-header h2 { margin:0; font-size:16px; font-weight:700; display:flex; align-items:center; gap:7px; }
+.modal-header h2 .deco { font-family:var(--display); font-size:19px; color:var(--shu); }
+.modal-close { margin-left:auto; background:none; border:none; font-size:22px; color:var(--sumi-faded); cursor:pointer; line-height:1; padding:0 4px; }
+.modal-body { padding:16px; }
+.modal-footer { padding:12px 16px 16px; display:grid; gap:8px; }
+
+.help-block { margin-bottom:14px; }
+.help-block h4 { margin:0 0 4px; font-size:13px; font-weight:700; display:flex; align-items:center; gap:6px; }
+.help-block h4::before { content:"▸"; color:var(--shu); }
+.help-block p, .help-block li { margin:0; font-size:13px; color:var(--sumi-soft); line-height:1.75; }
+.help-block ol, .help-block ul { margin:4px 0 0; padding-left:20px; }
+code { font-family:var(--mono); background:var(--washi-warm); padding:1px 5px; border-radius:4px; font-size:12px; word-break:break-all; }
+
+.toast {
+  position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom));
+  transform:translateX(-50%) translateY(120%); z-index:999;
+  background:var(--sumi); color:var(--washi); padding:11px 20px; border-radius:24px;
+  font-size:14px; box-shadow:var(--shadow-pop); transition:transform .3s cubic-bezier(.2,1.3,.4,1);
+  max-width:88vw; text-align:center;
+}
+.toast.show { transform:translateX(-50%) translateY(0); }
+
+.footer { text-align:center; padding:18px 14px 30px; font-size:11px; color:var(--sumi-faded); }
+.footer a { color:var(--sumi-faded); }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <div class="header-mark">配</div>
+    <div>
+      <h1 class="header-title">配信予約メーカー</h1>
+      <div class="header-sub">大会の配信枠をまとめて作る</div>
+    </div>
+    <div class="header-status">
+      <button class="header-icon-btn" id="btnTheme" title="テーマ切替">◑</button>
+      <button class="header-icon-btn" id="btnHelp" title="使い方">？</button>
+      <button class="header-icon-btn" id="btnSettings" title="設定">⚙</button>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs">
+  <div class="tabs-row">
+    <button class="tab active" data-view="tourney"><span class="tab-icon">大</span>大会設定</button>
+    <button class="tab" data-view="matches"><span class="tab-icon">組</span>試合表<span class="tab-badge" id="badgeMatches"></span></button>
+    <button class="tab" data-view="run"><span class="tab-icon">実</span>実行</button>
+    <button class="tab" data-view="history"><span class="tab-icon">履</span>履歴<span class="tab-badge" id="badgeRuns"></span></button>
+  </div>
+</nav>
+
+<main>
+
+<!-- ============ 大会設定 ============ -->
+<section class="view active" id="view-tourney">
+  <div class="card">
+    <h2 class="section-title"><span class="deco">大</span>大会の情報</h2>
+    <div class="field">
+      <label class="field-label" for="fTourney">大会名</label>
+      <input type="text" id="fTourney" placeholder="例：ペアモル甲子園〜夏物語2026〜">
+    </div>
+    <div class="grid-2">
+      <div class="field">
+        <label class="field-label" for="fDate">開催日</label>
+        <input type="date" id="fDate">
+      </div>
+      <div class="field">
+        <label class="field-label" for="fStart">第1試合の開始</label>
+        <input type="time" id="fStart" value="09:00">
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="field">
+        <label class="field-label" for="fInterval">試合の間隔（分）</label>
+        <input type="number" id="fInterval" min="1" max="600" value="30">
+      </div>
+      <div class="field">
+        <label class="field-label" for="fPrivacy">公開設定</label>
+        <select id="fPrivacy">
+          <option value="public">公開</option>
+          <option value="unlisted">限定公開</option>
+          <option value="private">非公開</option>
+        </select>
+      </div>
+    </div>
+    <div class="hint">開催日と開始時刻・間隔は「試合表」の時刻を自動で埋めるために使います。各試合の時刻は個別に直せます。</div>
+  </div>
+
+  <div class="card">
+    <h2 class="section-title"><span class="deco">陣</span>チーム名簿<span class="count" id="teamCount">0チーム</span></h2>
+    <div class="field">
+      <label class="field-label" for="fTeams">参加チーム<span class="opt">1行1チーム</span></label>
+      <textarea id="fTeams" placeholder="チーム名を1行ずつ"></textarea>
+      <div class="hint">試合表の「チームA / チームB」欄で、ここに入れた名前が入力候補として出ます。</div>
+    </div>
+    <div class="field">
+      <label class="field-label" for="fMyTeam">自分のチーム<span class="opt">任意</span></label>
+      <select id="fMyTeam"></select>
+      <div class="hint">自分のチームが出る試合に★が付き、「自分の試合だけON」でその試合だけ作成対象にできます。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 class="section-title"><span class="deco">名</span>タイトルと説明文</h2>
+    <div class="field">
+      <label class="field-label" for="fTitleTpl">タイトルの書式</label>
+      <input type="text" id="fTitleTpl" placeholder="{試合名} {対戦}">
+      <div class="hint">使える差し込み：<code>{大会名}</code> <code>{試合名}</code> <code>{対戦}</code> <code>{A}</code> <code>{B}</code> <code>{番号}</code> <code>{コート}</code> <code>{日付}</code> <code>{時刻}</code></div>
+    </div>
+    <div class="field">
+      <label class="field-label" for="fDescTpl">説明文の書式<span class="opt">任意</span></label>
+      <textarea id="fDescTpl" placeholder="{大会名}&#10;{日付} {時刻}〜&#10;{試合名}　{対戦}"></textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 class="section-title"><span class="deco">絵</span>サムネイル<span class="count">全試合に同じ画像</span></h2>
+    <div class="thumb-box">
+      <div class="thumb-prev" id="thumbPrev">未設定</div>
+      <div class="thumb-meta" id="thumbMeta">
+        <div class="fn">画像なし</div>
+        <div>設定しない場合、サムネイルの一括設定はスキップされます。</div>
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn btn-ghost btn-small" id="btnThumbPick">画像を選ぶ</button>
+      <button class="btn btn-ghost btn-small" id="btnThumbClear">外す</button>
+    </div>
+    <input type="file" id="fThumb" accept="image/jpeg,image/png" hidden>
+    <div class="hint">JPEG / PNG・2MBまで。カスタムサムネイルにはチャンネルの電話番号確認が必要です。</div>
+  </div>
+
+  <div class="card">
+    <h2 class="section-title"><span class="deco">列</span>再生リスト</h2>
+    <div class="field">
+      <label class="field-label" for="fPlMode">追加先</label>
+      <select id="fPlMode">
+        <option value="new">新しく作る（大会名で作成）</option>
+        <option value="existing">既にある再生リストに追加</option>
+        <option value="none">追加しない</option>
+      </select>
+    </div>
+    <div class="field" id="wrapPlTitle">
+      <label class="field-label" for="fPlTitle">新しい再生リストの名前<span class="opt">空なら大会名</span></label>
+      <input type="text" id="fPlTitle" placeholder="大会名がそのまま使われます">
+    </div>
+    <div class="field" id="wrapPlPick" hidden>
+      <label class="field-label" for="fPlId">再生リストを選ぶ</label>
+      <select id="fPlId"><option value="">（ログインすると読み込めます）</option></select>
+      <button class="btn btn-ghost btn-tiny" id="btnPlReload" style="margin-top:8px">一覧を読み込む</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 class="section-title"><span class="deco">細</span>配信の詳細設定</h2>
+    <div class="banner info"><span class="ic">📱</span><div>
+      PRISM Live から配信するなら、<b>PRISM Live 向けの設定</b>を押しておくと迷いません。
+      当日は PRISM の CONNECT で YouTube につなぎ、ここで作った配信枠を選ぶだけです。</div></div>
+    <button class="btn btn-ghost btn-small" id="btnPrismPreset" style="margin-bottom:12px">PRISM Live 向けの設定にする</button>
+    <div class="switch">
+      <div class="switch-label">子ども向けコンテンツ<small>いいえ（既定）のままで問題なければ触らなくて大丈夫です。</small></div>
+      <button class="switch-toggle" id="tgKids" role="switch" aria-checked="false"></button>
+    </div>
+    <hr class="divider">
+    <div class="switch">
+      <div class="switch-label">映像が届いたら自動で配信を開始<small>PRISM で「配信開始」を押した時点で、そのまま本番が始まります。</small></div>
+      <button class="switch-toggle" id="tgAutoStart" role="switch" aria-checked="false"></button>
+    </div>
+    <div class="switch">
+      <div class="switch-label">映像が止まったら自動で終了<small>電波が切れただけでも終了してしまうので、屋外ではOFF推奨です。</small></div>
+      <button class="switch-toggle" id="tgAutoStop" role="switch" aria-checked="false"></button>
+    </div>
+    <div class="switch">
+      <div class="switch-label">モニター（テスト配信）を使う<small>OFFにすると「テスト中」の一段階がなくなり、映像が届いたらすぐ本番になります。自動開始をONにすると自動でOFFになります。</small></div>
+      <button class="switch-toggle on" id="tgMonitor" role="switch" aria-checked="true"></button>
+    </div>
+    <div class="field" style="margin-top:10px">
+      <label class="field-label" for="fLatency">遅延設定</label>
+      <select id="fLatency">
+        <option value="">指定しない（YouTubeの既定）</option>
+        <option value="normal">通常</option>
+        <option value="low">低遅延</option>
+        <option value="ultraLow">超低遅延</option>
+      </select>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 試合表 ============ -->
+<section class="view" id="view-matches">
+  <div class="card">
+    <h2 class="section-title"><span class="deco">表</span>大会プリセットから作る</h2>
+    <div class="banner info"><span class="ic">📋</span><div>
+      <b>ペアモル甲子園〜夏物語2026〜</b>（2026/8/2）の対戦表を取り込み済みです。
+      予選は9:30から20分間隔で15試合、Aブロックが第1〜8コート、Bブロックが第9〜16コートです。</div></div>
+    <div class="field">
+      <label class="field-label" for="fPreset">取り込む範囲</label>
+      <select id="fPreset"></select>
+    </div>
+    <div class="switch">
+      <div class="switch-label">決勝トーナメントも入れる<small>1回戦14:50／準々決勝15:20／準決勝15:50／決勝16:30の4試合。対戦カードは未定なので空欄で入ります。</small></div>
+      <button class="switch-toggle on" id="tgPresetFinals" role="switch" aria-checked="true"></button>
+    </div>
+    <button class="btn btn-primary" id="btnLoadPreset" style="margin-top:6px">この範囲で試合表を作る</button>
+    <div class="hint">いま入っている試合表は置きかえられます。大会名・開催日・間隔もプリセットの値に合わせます。</div>
+  </div>
+
+  <div class="card">
+    <h2 class="section-title"><span class="deco">生</span>試合表を作る<span class="count">プリセットを使わない場合</span></h2>
+    <div class="grid-2">
+      <div class="field">
+        <label class="field-label" for="fQualCount">予選の試合数</label>
+        <input type="number" id="fQualCount" min="0" max="200" value="15">
+      </div>
+      <div class="field">
+        <label class="field-label" for="fQualTpl">予選の名前</label>
+        <input type="text" id="fQualTpl" value="予選第{n}試合">
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">決勝トーナメント<span class="opt">含める段階</span></label>
+      <div id="finalRounds"></div>
+    </div>
+    <button class="btn btn-primary" id="btnGenerate">この内容で試合表を作る</button>
+    <div class="hint">いま入っている試合表は置きかえられます。</div>
+    <hr class="divider">
+    <div class="field">
+      <label class="field-label" for="fPaste">貼り付けで作る<span class="opt">1行1試合</span></label>
+      <textarea id="fPaste" placeholder="予選第1試合, チームA, チームB&#10;予選第2試合, チームC, チームD&#10;決勝T決勝戦, , SAKURAN333マヨネーズ"></textarea>
+      <div class="hint">カンマ / タブ区切りで「試合名, A, B」。試合名だけの行もOKです。</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost btn-small" id="btnPasteAdd">追記する</button>
+      <button class="btn btn-ghost btn-small" id="btnPasteReplace">置きかえる</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 class="section-title">
+      <span class="deco">組</span>試合表<span class="count" id="matchCount">0件</span>
+      <span class="right"><button class="btn btn-ghost btn-tiny" id="btnRetime">時刻を再計算</button></span>
+    </h2>
+    <ul class="match-list" id="matchList"></ul>
+    <div class="btn-row" style="margin-top:10px">
+      <button class="btn btn-ghost btn-small" id="btnOnlyMine">自分の試合だけON</button>
+      <button class="btn btn-ghost btn-small" id="btnAllOn">全部ON</button>
+    </div>
+    <div class="btn-row" style="margin-top:8px">
+      <button class="btn btn-ghost btn-small" id="btnAddRow">1試合ふやす</button>
+      <button class="btn btn-danger btn-small" id="btnClearRows">全部消す</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 実行 ============ -->
+<section class="view" id="view-run">
+  <div class="card">
+    <h2 class="section-title"><span class="deco">認</span>Googleアカウント</h2>
+    <div id="authBox"></div>
+  </div>
+
+  <div class="card">
+    <h2 class="section-title"><span class="deco">検</span>事前チェック</h2>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-num" id="stNum">0</div><div class="stat-label">作る配信枠</div></div>
+      <div class="stat-card"><div class="stat-num" id="stQuota">0</div><div class="stat-label">消費クォータ</div></div>
+      <div class="stat-card"><div class="stat-num" id="stPct">0%</div><div class="stat-label">1日の上限比</div></div>
+    </div>
+    <div id="checkBox"></div>
+    <button class="btn btn-ghost" id="btnDryRun" style="margin-top:4px">リハーサル（作らずに確認）</button>
+  </div>
+
+  <div class="card">
+    <h2 class="section-title"><span class="deco">実</span>本番実行</h2>
+    <div class="banner warn"><span class="ic">⚠</span><div>実行するとYouTube上に実際の配信枠が作られます。まずは<b>リハーサル</b>で内容を確かめてください。</div></div>
+    <button class="btn btn-primary" id="btnRun">この内容で配信予約を一括作成する</button>
+    <button class="btn btn-danger" id="btnAbort" style="margin-top:8px" hidden>中断する</button>
+    <div class="progress" id="progWrap" hidden><i id="progBar"></i></div>
+    <div class="muted" id="progText" style="text-align:center" hidden></div>
+  </div>
+
+  <div class="card" id="logCard" hidden>
+    <h2 class="section-title"><span class="deco">録</span>結果<span class="count" id="logCount"></span></h2>
+    <ul class="log-list" id="logList"></ul>
+  </div>
+</section>
+
+<!-- ============ 履歴 ============ -->
+<section class="view" id="view-history">
+  <div class="card">
+    <h2 class="section-title"><span class="deco">履</span>実行の履歴<span class="count" id="runCount">0件</span></h2>
+    <div class="banner info"><span class="ic">🗂</span><div>作った配信枠のIDを端末内に残しています。間違えたときはここから<b>まとめて削除</b>や<b>失敗分だけ再実行</b>ができます。</div></div>
+    <div id="runList"></div>
+  </div>
+</section>
+
+<div class="footer">
+  <a href="./">← お昼の注文にもどる</a>　·　配信予約メーカー v1.0
+</div>
+</main>
+
+<!-- ============ 設定モーダル ============ -->
+<div class="modal-bg" id="mdSettings">
+  <div class="modal">
+    <div class="modal-header"><h2><span class="deco">設</span>設定</h2><button class="modal-close" data-close>×</button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label class="field-label" for="fClientId">OAuth クライアントID</label>
+        <input type="text" id="fClientId" placeholder="xxxxxxxx.apps.googleusercontent.com">
+        <div class="hint">Google Cloud で作った「ウェブアプリケーション」のクライアントIDを貼ってください。端末内にのみ保存されます。</div>
+      </div>
+      <div class="banner info" style="margin-top:12px"><span class="ic">🔑</span><div>承認済みのJavaScript生成元に <code id="originHint"></code> を登録しておく必要があります。</div></div>
+      <hr class="divider">
+      <div class="field">
+        <label class="field-label">保存データ</label>
+        <div class="btn-row">
+          <button class="btn btn-ghost btn-small" id="btnExport">設定を書き出す</button>
+          <button class="btn btn-danger btn-small" id="btnResetAll">全部リセット</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-primary" id="btnSaveSettings">保存する</button></div>
+  </div>
+</div>
+
+<!-- ============ ヘルプモーダル ============ -->
+<div class="modal-bg" id="mdHelp">
+  <div class="modal">
+    <div class="modal-header"><h2><span class="deco">説</span>使い方</h2><button class="modal-close" data-close>×</button></div>
+    <div class="modal-body">
+      <div class="help-block">
+        <h4>はじめに1回だけ：APIの準備</h4>
+        <ol>
+          <li><a href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console</a> でプロジェクトを作る</li>
+          <li>「APIとサービス」→ <b>YouTube Data API v3</b> を有効化</li>
+          <li>「OAuth同意画面」を作り、自分のアカウントを<b>テストユーザー</b>に追加</li>
+          <li>「認証情報」→ OAuthクライアントID →「<b>ウェブアプリケーション</b>」</li>
+          <li>承認済みのJavaScript生成元に <code id="originHint2"></code> を追加</li>
+          <li>できたクライアントIDを、このページの⚙設定に貼る</li>
+        </ol>
+      </div>
+      <div class="help-block">
+        <h4>毎回の流れ</h4>
+        <ol>
+          <li><b>大会設定</b>で大会名・日付・タイトル書式・サムネイルを決める</li>
+          <li><b>試合表</b>で試合数を入れて自動生成、必要なら対戦カードと時刻を直す</li>
+          <li><b>実行</b>でログインし、まず<b>リハーサル</b>で確認</li>
+          <li>問題なければ<b>一括作成</b>を押す</li>
+        </ol>
+      </div>
+      <div class="help-block">
+        <h4>PRISM Live から配信する場合</h4>
+        <p>このページは<b>配信枠を先に作っておくだけ</b>で、配信そのものは PRISM Live から行います。</p>
+        <ol>
+          <li>前日までに、このページで全試合ぶんの配信枠を作る</li>
+          <li>「PRISM Live 向けの設定にする」を押してから作ると、テスト配信の一段階がなくなる</li>
+          <li>当日、PRISM Live で <b>LIVE → CONNECT</b> から YouTube に接続</li>
+          <li>作っておいた<b>配信予定の一覧から、その試合の枠を選ぶ</b></li>
+          <li>配信開始。タイトル・サムネイル・再生リストは設定済みなので、毎回入力しなくていい</li>
+        </ol>
+        <p>試合ごとに枠を選び直すので、タイトルは一覧で見分けやすい書式にしておくのがおすすめです。</p>
+      </div>
+      <div class="help-block">
+        <h4>知っておくこと</h4>
+        <ul>
+          <li>チャンネルで<b>ライブ配信が有効</b>になっている必要があります（有効化に24時間かかる場合あり）。</li>
+          <li>APIの1日のクォータは既定で<b>10,000</b>。配信枠1件あたり50、サムネ設定50、再生リスト追加50を消費します（19試合フルセットでおよそ2,900）。</li>
+          <li>開始予定時刻は<b>未来の時刻</b>である必要があります。</li>
+          <li>カスタムサムネイルにはチャンネルの電話番号確認が必要です。</li>
+          <li>ログインの有効期限は約1時間です。切れたら再度ログインしてください。</li>
+          <li>本番前に、まず<b>限定公開で1件だけ</b>作って PRISM から選べるか試してください。</li>
+        </ul>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-primary" data-close>閉じる</button></div>
+  </div>
+</div>
+
+<!-- ============ 確認モーダル ============ -->
+<div class="modal-bg" id="mdConfirm">
+  <div class="modal">
+    <div class="modal-header"><h2><span class="deco">確</span><span id="cfTitle">確認</span></h2><button class="modal-close" data-close>×</button></div>
+    <div class="modal-body">
+      <div id="cfBody"></div>
+      <div class="field" id="cfTypeWrap" hidden style="margin-top:12px">
+        <label class="field-label" for="cfType">確認のため <code>削除</code> と入力してください</label>
+        <input type="text" id="cfType" placeholder="削除">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="cfOk">実行する</button>
+      <button class="btn btn-ghost" data-close>やめる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ リハーサルモーダル ============ -->
+<div class="modal-bg" id="mdDry">
+  <div class="modal">
+    <div class="modal-header"><h2><span class="deco">試</span>リハーサル結果</h2><button class="modal-close" data-close>×</button></div>
+    <div class="modal-body" id="dryBody"></div>
+    <div class="modal-footer"><button class="btn btn-primary" data-close>閉じる</button></div>
+  </div>
+</div>
+
+<datalist id="teamList"></datalist>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* =========================================================================
+   配信予約メーカー v1.0
+   YouTube Data API v3 で大会の配信枠をまとめて作る
+   ========================================================================= */
+
+const LS_KEY = "stream-scheduler.v1";
+const SCOPES = [
+  "https://www.googleapis.com/auth/youtube.force-ssl",
+  "https://www.googleapis.com/auth/youtube.upload"
+].join(" ");
+const API = "https://www.googleapis.com/youtube/v3/";
+const UPLOAD_API = "https://www.googleapis.com/upload/youtube/v3/";
+const DAILY_QUOTA = 10000;
+const COST = { broadcast: 50, thumbnail: 50, playlist: 50, playlistItem: 50 };
+/* -------------------------------------------------------------------------
+   大会プリセット：ペアモル甲子園〜夏物語2026〜（2026/8/2 沼南駅高架下）
+   大会スプレッドシートの対戦表をそのまま持ってきたもの。
+   キーは抽選番号。1〜16がAブロック（第1〜8コート）、17〜32がBブロック（第9〜16コート）。
+   ------------------------------------------------------------------------- */
+const T2026_TEAMS = {
+  1: "MCどんぐり", 2: "ディア・ナノモッテ", 3: "埼玉と千葉", 4: "ブラッキーズ98",
+  5: "solmio", 6: "たまつう", 7: "池袋ウッドペッカーズ", 8: "もるもと木材",
+  9: "つぶ貝スパゲッティ", 10: "チェリー", 11: "SIXEN344", 12: "SMA",
+  13: "GRIFFON", 14: "浦安神頼み", 15: "桜台ネイバーズ1", 16: "たいみぃ",
+  17: "男祭り2026", 18: "わっしょいモルック", 19: "YouTuber", 20: "MMコンビ",
+  21: "ムラキ〜ズ", 22: "大宮モックル", 23: "YG", 24: "ブルベル67",
+  25: "七転び八起き～ず", 26: "梅アッズーリ", 27: "SAKURAN333マヨネーズ", 28: "NOLLA",
+  29: "ゆうやん大好き同好会", 30: "Sixen233-2", 31: "pocheecom", 32: "SAKURAN333サ飯"
+};
+// 予選15試合ぶん、各行が第1〜第8コートの対戦（抽選番号のペア）
+const T2026_A = [
+  [[5,6],[3,4],[1,2],[7,8],[9,10],[11,12],[15,16],[13,14]],
+  [[5,2],[9,6],[7,4],[13,10],[1,3],[11,8],[15,12],[16,14]],
+  [[15,8],[9,2],[13,6],[14,12],[7,3],[1,5],[16,10],[11,4]],
+  [[13,2],[16,6],[15,4],[9,5],[12,10],[1,7],[11,3],[14,8]],
+  [[16,2],[11,7],[10,8],[13,5],[1,9],[14,4],[15,3],[12,6]],
+  [[1,11],[10,4],[12,2],[15,7],[13,9],[14,3],[8,6],[16,5]],
+  [[12,5],[14,7],[6,4],[15,11],[8,2],[10,3],[1,13],[16,9]],
+  [[1,15],[6,3],[16,13],[12,9],[10,7],[8,5],[14,11],[4,2]],
+  [[2,3],[4,5],[8,9],[6,7],[10,11],[14,15],[12,13],[1,16]],
+  [[2,7],[10,15],[4,9],[6,11],[12,16],[8,13],[3,5],[1,14]],
+  [[10,14],[6,15],[5,7],[4,13],[2,11],[8,16],[3,9],[1,12]],
+  [[3,13],[4,16],[5,11],[7,9],[1,10],[8,12],[6,14],[2,15]],
+  [[7,13],[4,12],[5,15],[3,16],[1,8],[6,10],[9,11],[2,14]],
+  [[9,15],[1,6],[7,16],[3,12],[2,10],[5,14],[4,8],[11,13]],
+  [[9,14],[11,16],[1,4],[5,10],[2,6],[7,12],[13,15],[3,8]]
+];
+// 同じく、各行が第9〜第16コートの対戦
+const T2026_B = [
+  [[21,22],[19,20],[17,18],[23,24],[25,26],[27,28],[31,32],[29,30]],
+  [[21,18],[25,22],[23,20],[29,26],[17,19],[27,24],[31,28],[32,30]],
+  [[31,24],[25,18],[29,22],[30,28],[23,19],[17,21],[32,26],[27,20]],
+  [[29,18],[32,22],[31,20],[25,21],[28,26],[17,23],[27,19],[30,24]],
+  [[32,18],[27,23],[26,24],[29,21],[17,25],[30,20],[31,19],[28,22]],
+  [[17,27],[26,20],[28,18],[31,23],[29,25],[30,19],[24,22],[32,21]],
+  [[28,21],[30,23],[22,20],[31,27],[24,18],[26,19],[17,29],[32,25]],
+  [[17,31],[22,19],[32,29],[28,25],[26,23],[24,21],[30,27],[20,18]],
+  [[18,19],[20,21],[24,25],[22,23],[26,27],[30,31],[28,29],[17,32]],
+  [[18,23],[26,31],[20,25],[22,27],[28,32],[24,29],[19,21],[17,30]],
+  [[26,30],[22,31],[21,23],[20,29],[18,27],[24,32],[19,25],[17,28]],
+  [[19,29],[20,32],[21,27],[23,25],[17,26],[24,28],[22,30],[18,31]],
+  [[23,29],[20,28],[21,31],[19,32],[17,24],[22,26],[25,27],[18,30]],
+  [[25,31],[17,22],[23,32],[19,28],[18,26],[21,30],[20,24],[27,29]],
+  [[25,30],[27,32],[17,20],[21,26],[18,22],[23,28],[29,31],[19,24]]
+];
+const T2026 = {
+  name: "ペアモル甲子園〜夏物語2026〜",
+  date: "2026-08-02",
+  firstStart: "09:30",
+  interval: 20,
+  finals: [
+    ["決勝T1回戦", "14:50"], ["決勝T準々決勝", "15:20"],
+    ["決勝T準決勝", "15:50"], ["決勝T決勝戦", "16:30"]
+  ]
+};
+const PRESET_TEAMS = Object.keys(T2026_TEAMS)
+  .sort((a, b) => a - b).map((k) => T2026_TEAMS[k]);
+const FINAL_ROUNDS = [
+  { key: "r1",  label: "1回戦",   name: "決勝T1回戦" },
+  { key: "qf",  label: "準々決勝", name: "決勝T準々決勝" },
+  { key: "sf",  label: "準決勝",   name: "決勝T準決勝" },
+  { key: "f",   label: "決勝戦",   name: "決勝T決勝戦" }
+];
+
+/* ---------- 状態 ---------- */
+const defaults = () => ({
+  cfg: {
+    clientId: "", tourney: "", date: "", startTime: "09:00", interval: 30,
+    privacy: "public", madeForKids: false, autoStart: false, autoStop: false,
+    monitor: true, latency: "",
+    titleTpl: "{試合名} {対戦}",
+    descTpl: "{大会名}\n{日付} {時刻}〜\n{試合名}　{対戦}",
+    plMode: "new", plTitle: "", plId: "",
+    qualCount: 15, qualTpl: "予選第{n}試合",
+    finals: { r1: true, qf: true, sf: true, f: true },
+    teams: PRESET_TEAMS.slice(), myTeam: "浦安神頼み",
+    theme: "auto"
+  },
+  matches: [],
+  thumb: null,
+  runs: []
+});
+
+let state = defaults();
+let accessToken = null;
+let tokenClient = null;
+let tokenExpiry = 0;
+let aborted = false;
+let running = false;
+let uid = 0;
+
+/* ---------- 小道具 ---------- */
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => Array.from(document.querySelectorAll(s));
+const nextId = () => "m" + (++uid) + "-" + Math.floor(Math.random() * 1e6).toString(36);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove("show"), 2600);
+}
+function save() {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+  } catch (e) {
+    // 画像を含むと容量を超えることがある。設定だけでも残す。
+    try {
+      const slim = Object.assign({}, state, { thumb: null });
+      localStorage.setItem(LS_KEY, JSON.stringify(slim));
+      toast("画像が大きいため、サムネイルは保存されませんでした");
+    } catch (e2) { /* 保存を諦める */ }
+  }
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return;
+    const got = JSON.parse(raw);
+    const d = defaults();
+    state = {
+      cfg: Object.assign(d.cfg, got.cfg || {}),
+      matches: Array.isArray(got.matches) ? got.matches : [],
+      thumb: got.thumb || null,
+      runs: Array.isArray(got.runs) ? got.runs : []
+    };
+    state.cfg.finals = Object.assign(d.cfg.finals, (got.cfg && got.cfg.finals) || {});
+  } catch (e) { /* 壊れていたら初期値 */ }
+}
+
+/* ---------- 日時 ---------- */
+function pad(n) { return String(n).padStart(2, "0"); }
+function toLocalInput(d) {
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+    "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+}
+function parseLocalInput(s) {
+  if (!s) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(s);
+  if (!m) return null;
+  return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], 0, 0);
+}
+function fmtDate(d) {
+  const w = "日月火水木金土"[d.getDay()];
+  return d.getFullYear() + "/" + pad(d.getMonth() + 1) + "/" + pad(d.getDate()) + "(" + w + ")";
+}
+function fmtTime(d) { return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+function fmtStamp(ms) {
+  const d = new Date(ms);
+  return fmtDate(d) + " " + fmtTime(d);
+}
+
+/* ---------- テンプレート ---------- */
+function vsText(m) {
+  const a = (m.a || "").trim(), b = (m.b || "").trim();
+  if (a && b) return a + " vs " + b;
+  if (b) return "vs " + b;
+  return a;
+}
+function fillTpl(tpl, m, idx) {
+  const d = parseLocalInput(m.at);
+  const map = {
+    "{大会名}": state.cfg.tourney || "",
+    "{試合名}": (m.name || "").trim(),
+    "{対戦}": vsText(m),
+    "{A}": (m.a || "").trim(),
+    "{B}": (m.b || "").trim(),
+    "{番号}": String(idx + 1),
+    "{コート}": m.court ? "第" + m.court + "コート" : "",
+    "{日付}": d ? fmtDate(d) : "",
+    "{時刻}": d ? fmtTime(d) : ""
+  };
+  let out = String(tpl || "");
+  for (const k in map) out = out.split(k).join(map[k]);
+  return out.replace(/[ 　]{2,}/g, " ").replace(/^[ 　]+|[ 　]+$/gm, "").trim();
+}
+function buildTitle(m, idx) { return fillTpl(state.cfg.titleTpl, m, idx); }
+function buildDesc(m, idx) { return fillTpl(state.cfg.descTpl, m, idx); }
+
+/* =========================================================================
+   認証
+   ========================================================================= */
+function gisReady() {
+  return typeof google !== "undefined" && google.accounts && google.accounts.oauth2;
+}
+function tokenAlive() { return !!accessToken && Date.now() < tokenExpiry - 60000; }
+
+function ensureTokenClient() {
+  if (!state.cfg.clientId) throw new Error("設定でOAuthクライアントIDを登録してください。");
+  if (!gisReady()) throw new Error("Googleのログイン部品がまだ読み込めていません。少し待ってからもう一度お試しください。");
+  if (!tokenClient || tokenClient._cid !== state.cfg.clientId) {
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: state.cfg.clientId,
+      scope: SCOPES,
+      callback: () => {}
+    });
+    tokenClient._cid = state.cfg.clientId;
+  }
+  return tokenClient;
+}
+
+function login(silent) {
+  return new Promise((resolve, reject) => {
+    let client;
+    try { client = ensureTokenClient(); } catch (e) { reject(e); return; }
+    client.callback = (resp) => {
+      if (resp && resp.error) {
+        reject(new Error("ログインできませんでした（" + resp.error + "）"));
+        return;
+      }
+      accessToken = resp.access_token;
+      tokenExpiry = Date.now() + (Number(resp.expires_in) || 3600) * 1000;
+      renderAuth();
+      resolve(accessToken);
+    };
+    client.error_callback = (err) => {
+      reject(new Error("ログイン画面を開けませんでした（" + ((err && err.type) || "unknown") +
+        "）。ポップアップがブロックされていないか確認してください。"));
+    };
+    try {
+      client.requestAccessToken({ prompt: silent ? "" : "consent" });
+    } catch (e) { reject(e); }
+  });
+}
+
+function logout() {
+  if (accessToken && gisReady()) {
+    try { google.accounts.oauth2.revoke(accessToken, () => {}); } catch (e) { /* noop */ }
+  }
+  accessToken = null;
+  tokenExpiry = 0;
+  renderAuth();
+  toast("ログアウトしました");
+}
+
+/* =========================================================================
+   API 呼び出し
+   ========================================================================= */
+class ApiError extends Error {
+  constructor(status, reason, message) {
+    super(message);
+    this.status = status;
+    this.reason = reason;
+  }
+}
+
+const REASON_JA = {
+  quotaExceeded: "本日のAPI利用上限に達しました。明日まで待つか、Cloud Consoleで上限の引き上げを申請してください。",
+  rateLimitExceeded: "リクエストが多すぎます。少し時間をおいて再実行してください。",
+  liveStreamingNotEnabled: "このチャンネルでライブ配信が有効になっていません。YouTube Studioで有効化してください（反映に24時間かかることがあります）。",
+  livePermissionBlocked: "このチャンネルはライブ配信を利用できない状態です。",
+  insufficientLivePermissions: "ライブ配信の権限が足りません。",
+  invalidScheduledStartTime: "開始予定時刻が不正です。未来の時刻を指定してください。",
+  invalidTitle: "タイトルが不正です。100文字以内で、< と > を含まない必要があります。",
+  invalidDescription: "説明文が不正です。5000文字以内で、< と > を含まない必要があります。",
+  forbidden: "権限がありません。カスタムサムネイルの場合はチャンネルの電話番号確認が必要です。",
+  authError: "ログインの有効期限が切れています。もう一度ログインしてください。",
+  playlistIdRequired: "再生リストIDが指定されていません。",
+  videoAlreadyInPlaylist: "すでに再生リストに入っています。",
+  mediaBodyRequired: "画像データが送られませんでした。"
+};
+
+async function parseError(res) {
+  let reason = "", message = "";
+  try {
+    const j = await res.json();
+    const e = j && j.error;
+    if (e) {
+      message = e.message || "";
+      if (e.errors && e.errors[0]) reason = e.errors[0].reason || "";
+      if (!reason && e.status) reason = e.status;
+    }
+  } catch (err) { /* JSONでないこともある */ }
+  const ja = REASON_JA[reason];
+  return new ApiError(res.status, reason, ja || message || ("HTTP " + res.status));
+}
+
+async function rawCall(method, url, opts) {
+  const headers = { Authorization: "Bearer " + accessToken };
+  let body = null;
+  if (opts.blob) {
+    headers["Content-Type"] = opts.blob.type || "application/octet-stream";
+    body = opts.blob;
+  } else if (opts.json) {
+    headers["Content-Type"] = "application/json";
+    body = JSON.stringify(opts.json);
+  }
+  const res = await fetch(url, { method, headers, body });
+  if (!res.ok) throw await parseError(res);
+  if (res.status === 204) return null;
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+async function call(method, path, opts) {
+  opts = opts || {};
+  const base = opts.upload ? UPLOAD_API : API;
+  const url = new URL(base + path);
+  const params = opts.params || {};
+  for (const k in params) if (params[k] != null && params[k] !== "") url.searchParams.set(k, params[k]);
+
+  let lastErr = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      if (!tokenAlive()) await login(true);
+      return await rawCall(method, url.toString(), opts);
+    } catch (e) {
+      lastErr = e;
+      const status = e && e.status;
+      if (status === 401 && attempt === 0) {
+        accessToken = null; tokenExpiry = 0;
+        continue; // トークンを取り直して再試行
+      }
+      if (status === 429 || (status >= 500 && status < 600)) {
+        await sleep(1000 * Math.pow(2, attempt));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr;
+}
+
+/* --- 個別API --- */
+function createBroadcast(title, description, startISO) {
+  const cfg = state.cfg;
+  const body = {
+    snippet: { title, scheduledStartTime: startISO },
+    status: { privacyStatus: cfg.privacy, selfDeclaredMadeForKids: !!cfg.madeForKids }
+  };
+  if (description) body.snippet.description = description;
+
+  const parts = ["snippet", "status"];
+  const cd = {};
+  if (cfg.autoStart) cd.enableAutoStart = true;
+  if (cfg.autoStop) cd.enableAutoStop = true;
+  if (cfg.latency) cd.latencyPreference = cfg.latency;
+  // 自動開始はテスト配信と併用できないので、その場合はモニターを切る
+  if (!cfg.monitor || cfg.autoStart) cd.monitorStream = { enableMonitorStream: false };
+  if (Object.keys(cd).length) { body.contentDetails = cd; parts.push("contentDetails"); }
+
+  return call("POST", "liveBroadcasts", { params: { part: parts.join(",") }, json: body });
+}
+function deleteBroadcast(id) {
+  return call("DELETE", "liveBroadcasts", { params: { id } });
+}
+function createPlaylist(title, description) {
+  return call("POST", "playlists", {
+    params: { part: "snippet,status" },
+    json: {
+      snippet: { title: title, description: description || "" },
+      status: { privacyStatus: state.cfg.privacy === "private" ? "private" : "public" }
+    }
+  });
+}
+function listPlaylists() {
+  return call("GET", "playlists", { params: { part: "snippet", mine: "true", maxResults: 50 } });
+}
+function addToPlaylist(playlistId, videoId, position) {
+  const snippet = { playlistId, resourceId: { kind: "youtube#video", videoId } };
+  if (position != null) snippet.position = position;
+  return call("POST", "playlistItems", { params: { part: "snippet" }, json: { snippet } });
+}
+function setThumbnail(videoId, blob) {
+  return call("POST", "thumbnails/set", { upload: true, params: { videoId }, blob });
+}
+
+function dataUrlToBlob(dataUrl) {
+  const [head, b64] = dataUrl.split(",");
+  const mime = (/data:([^;]+)/.exec(head) || [, "image/jpeg"])[1];
+  const bin = atob(b64);
+  const buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  return new Blob([buf], { type: mime });
+}
+
+/* =========================================================================
+   試合表
+   ========================================================================= */
+function newMatch(name, a, b, at, court) {
+  const m = { id: nextId(), name: name || "", a: a || "", b: b || "", at: at || "", on: true };
+  if (court) m.court = court;
+  return m;
+}
+function baseDate() {
+  const cfg = state.cfg;
+  if (!cfg.date) return null;
+  const t = (cfg.startTime || "09:00").split(":");
+  const d = new Date(cfg.date + "T00:00:00");
+  if (isNaN(d.getTime())) return null;
+  d.setHours(Number(t[0]) || 0, Number(t[1]) || 0, 0, 0);
+  return d;
+}
+function retime() {
+  const start = baseDate();
+  if (!start) { toast("大会設定で開催日を入れてください"); return false; }
+  const step = Math.max(1, Number(state.cfg.interval) || 30);
+  state.matches.forEach((m, i) => {
+    m.at = toLocalInput(new Date(start.getTime() + i * step * 60000));
+  });
+  return true;
+}
+function generateMatches() {
+  const cfg = state.cfg;
+  const list = [];
+  const n = Math.max(0, Number(cfg.qualCount) || 0);
+  for (let i = 1; i <= n; i++) {
+    list.push(newMatch(String(cfg.qualTpl || "予選第{n}試合").split("{n}").join(String(i))));
+  }
+  FINAL_ROUNDS.forEach((r) => { if (cfg.finals[r.key]) list.push(newMatch(r.name)); });
+  state.matches = list;
+  retime();
+  save();
+  renderMatches();
+  toast(list.length + "試合の表を作りました");
+}
+/* ---------- 大会プリセット ---------- */
+function presetOptions() {
+  const opts = [{ v: "mine", t: "自分のチームの試合（予選15試合）" }];
+  for (let i = 0; i < 8; i++) opts.push({ v: "A" + i, t: "Aブロック 第" + (i + 1) + "コート（15試合）" });
+  for (let i = 0; i < 8; i++) opts.push({ v: "B" + i, t: "Bブロック 第" + (i + 9) + "コート（15試合）" });
+  opts.push({ v: "allA", t: "Aブロック全部（120試合）" });
+  opts.push({ v: "allB", t: "Bブロック全部（120試合）" });
+  opts.push({ v: "all", t: "全試合（240試合・クォータ超過に注意）" });
+  return opts;
+}
+function presetStart(round) {
+  const t = T2026.firstStart.split(":");
+  const d = new Date(T2026.date + "T00:00:00");
+  d.setHours(Number(t[0]), Number(t[1]) + T2026.interval * round, 0, 0);
+  return toLocalInput(d);
+}
+function presetAt(hhmm) {
+  const t = hhmm.split(":");
+  const d = new Date(T2026.date + "T00:00:00");
+  d.setHours(Number(t[0]), Number(t[1]), 0, 0);
+  return toLocalInput(d);
+}
+function presetRow(round, pair, court) {
+  return newMatch("予選第" + (round + 1) + "試合",
+    T2026_TEAMS[pair[0]], T2026_TEAMS[pair[1]], presetStart(round), court);
+}
+function buildPreset(mode, withFinals) {
+  const list = [];
+  const addBlock = (sched, courtBase, courtIdx) => {
+    sched.forEach((round, r) => {
+      round.forEach((pair, c) => {
+        if (courtIdx != null && c !== courtIdx) return;
+        list.push(presetRow(r, pair, courtBase + c));
+      });
+    });
+  };
+
+  if (mode === "mine") {
+    const my = (state.cfg.myTeam || "").trim();
+    const no = Number(Object.keys(T2026_TEAMS).find((k) => T2026_TEAMS[k] === my));
+    if (!no) return null;
+    const inA = no <= 16;
+    const sched = inA ? T2026_A : T2026_B;
+    const base = inA ? 1 : 9;
+    sched.forEach((round, r) => {
+      round.forEach((pair, c) => {
+        if (pair[0] === no || pair[1] === no) list.push(presetRow(r, pair, base + c));
+      });
+    });
+  } else if (mode[0] === "A" && mode.length > 1 && mode !== "allA") {
+    addBlock(T2026_A, 1, Number(mode.slice(1)));
+  } else if (mode[0] === "B" && mode.length > 1 && mode !== "allB") {
+    addBlock(T2026_B, 9, Number(mode.slice(1)));
+  } else if (mode === "allA") {
+    addBlock(T2026_A, 1, null);
+  } else if (mode === "allB") {
+    addBlock(T2026_B, 9, null);
+  } else {
+    addBlock(T2026_A, 1, null);
+    addBlock(T2026_B, 9, null);
+  }
+
+  // 同じ開始時刻のものが並ぶので、時刻→コートの順に整える
+  list.sort((x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : (x.court || 0) - (y.court || 0)));
+  if (withFinals) {
+    T2026.finals.forEach((f) => list.push(newMatch(f[0], "", "", presetAt(f[1]), 0)));
+  }
+  return list;
+}
+
+function parsePasted(text) {
+  return String(text || "").split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .map((l) => {
+      const cols = l.split(/[,\t]/).map((c) => c.trim());
+      return newMatch(cols[0], cols[1], cols[2]);
+    });
+}
+function activeMatches() {
+  return state.matches.filter((m) => m.on && (m.name || m.a || m.b));
+}
+function isMine(m) {
+  const my = (state.cfg.myTeam || "").trim();
+  if (!my) return false;
+  return (m.a || "").trim() === my || (m.b || "").trim() === my;
+}
+
+/* =========================================================================
+   描画
+   ========================================================================= */
+function renderMatches() {
+  const ul = $("#matchList");
+  if (!state.matches.length) {
+    ul.innerHTML = '<div class="empty"><div class="empty-art">無</div>' +
+      '<div>まだ試合がありません。<br>上の「試合表を作る」から生成してください。</div></div>';
+  } else {
+    ul.innerHTML = state.matches.map((m, i) => {
+      const title = buildTitle(m, i);
+      const over = title.length > 100;
+      const d = parseLocalInput(m.at);
+      const past = d && d.getTime() < Date.now();
+      const mine = isMine(m);
+      return '<li class="match-item' + (m.on ? "" : " off") + (mine ? " mine" : "") + '" data-id="' + m.id + '">' +
+        '<div class="match-head">' +
+          '<span class="match-no' + (mine ? " mine" : "") + '">' + (mine ? "★" : (i + 1)) + '</span>' +
+          '<input type="text" data-f="name" value="' + esc(m.name) + '" placeholder="試合名（例：予選第1試合）">' +
+          '<button class="icon-btn' + (m.on ? " on" : "") + '" data-act="toggle" title="この試合を作る/作らない">' + (m.on ? "✓" : "―") + '</button>' +
+        '</div>' +
+        '<div class="match-vs">' +
+          '<input type="text" list="teamList" data-f="a" value="' + esc(m.a) + '" placeholder="チームA">' +
+          '<span class="vs">vs</span>' +
+          '<input type="text" list="teamList" data-f="b" value="' + esc(m.b) + '" placeholder="チームB">' +
+        '</div>' +
+        '<div class="match-foot">' +
+          '<input type="datetime-local" data-f="at" value="' + esc(m.at) + '">' +
+          '<button class="icon-btn danger" data-act="del" title="削除">×</button>' +
+        '</div>' +
+        '<div class="match-preview">' +
+          '<span class="tt">' + (title ? esc(title) : "（タイトルが空です）") + '</span>' +
+          (over ? ' <span class="over">← ' + title.length + '文字（100文字まで）</span>' : "") +
+          (past ? ' <span class="over">← 過去の時刻</span>' : "") +
+        '</div>' +
+      '</li>';
+    }).join("");
+  }
+  const n = state.matches.length;
+  $("#matchCount").textContent = n + "件";
+  const badge = $("#badgeMatches");
+  badge.textContent = n;
+  badge.classList.toggle("show", n > 0);
+  renderPreflight();
+}
+
+function renderAuth() {
+  const box = $("#authBox");
+  if (!state.cfg.clientId) {
+    box.innerHTML = '<div class="banner warn"><span class="ic">⚙</span><div>' +
+      'まず⚙設定で<b>OAuthクライアントID</b>を登録してください。やり方は「？」の使い方に載せています。</div></div>' +
+      '<button class="btn btn-ghost" id="btnOpenSettings2">設定を開く</button>';
+    $("#btnOpenSettings2").onclick = () => openModal("#mdSettings");
+    return;
+  }
+  if (tokenAlive()) {
+    const mins = Math.max(0, Math.round((tokenExpiry - Date.now()) / 60000));
+    box.innerHTML = '<div class="banner ok"><span class="ic">✓</span><div>' +
+      'ログイン済みです。あと約<b>' + mins + '分</b>有効です。</div></div>' +
+      '<button class="btn btn-ghost btn-small" id="btnLogout">ログアウト</button>';
+    $("#btnLogout").onclick = logout;
+  } else {
+    box.innerHTML = '<div class="banner info"><span class="ic">🔒</span><div>' +
+      '配信枠を作るチャンネルのGoogleアカウントでログインしてください。</div></div>' +
+      '<button class="btn btn-primary" id="btnLogin">Googleでログイン</button>';
+    $("#btnLogin").onclick = async () => {
+      try { await login(false); toast("ログインしました"); }
+      catch (e) { toast(e.message); }
+    };
+  }
+  if (!running) renderPreflight();
+}
+
+function renderPreflight() {
+  const ms = activeMatches();
+  const cfg = state.cfg;
+  const n = ms.length;
+  const hasThumb = !!state.thumb;
+  const usePl = cfg.plMode !== "none";
+
+  let quota = n * COST.broadcast;
+  if (hasThumb) quota += n * COST.thumbnail;
+  if (usePl) quota += n * COST.playlistItem + (cfg.plMode === "new" ? COST.playlist : 0);
+
+  $("#stNum").textContent = n;
+  $("#stQuota").textContent = quota.toLocaleString();
+  const pct = Math.round((quota / DAILY_QUOTA) * 100);
+  $("#stPct").textContent = pct + "%";
+
+  const issues = [];
+  if (!cfg.clientId.trim()) issues.push(["err", "OAuthクライアントIDが未設定です。⚙設定から登録してください。"]);
+  else if (!tokenAlive()) issues.push(["warn", "まだログインしていません。実行するとログイン画面が開きます。"]);
+  if (!cfg.tourney.trim()) issues.push(["warn", "大会名が空です。タイトル書式で使っている場合は空欄になります。"]);
+  if (!n) issues.push(["err", "作成対象の試合がありません。「試合表」で作ってください。"]);
+  const noTime = ms.filter((m) => !parseLocalInput(m.at)).length;
+  if (noTime) issues.push(["err", noTime + "件の試合で開始予定時刻が入っていません。"]);
+  const past = ms.filter((m) => { const d = parseLocalInput(m.at); return d && d.getTime() < Date.now(); }).length;
+  if (past) issues.push(["err", past + "件の試合が過去の時刻です。YouTubeは未来の時刻しか受け付けません。"]);
+  const longT = ms.filter((m, i) => buildTitle(m, state.matches.indexOf(m)).length > 100).length;
+  if (longT) issues.push(["err", longT + "件のタイトルが100文字を超えています。"]);
+  const emptyT = ms.filter((m) => !buildTitle(m, state.matches.indexOf(m)).trim()).length;
+  if (emptyT) issues.push(["err", emptyT + "件のタイトルが空です。"]);
+  const dup = new Set();
+  let dupCount = 0;
+  ms.forEach((m) => { if (dup.has(m.at)) dupCount++; else dup.add(m.at); });
+  if (dupCount) issues.push(["warn", dupCount + "件が同じ開始時刻です。意図通りか確認してください。"]);
+  if (quota > DAILY_QUOTA) issues.push(["err", "1日のクォータ（" + DAILY_QUOTA.toLocaleString() + "）を超えます。試合を分けて実行してください。"]);
+  else if (quota > DAILY_QUOTA * 0.5) issues.push(["warn", "1日のクォータの半分以上を使います。"]);
+  if (hasThumb) issues.push(["info", "サムネイルを全" + n + "件に設定します（要：チャンネルの電話番号確認）。"]);
+  if (cfg.plMode === "new") issues.push(["info", "再生リスト「" + (cfg.plTitle.trim() || cfg.tourney.trim() || "（名前未設定）") + "」を新規作成して追加します。"]);
+  if (cfg.plMode === "existing") {
+    if (cfg.plId) issues.push(["info", "既存の再生リストに追加します。"]);
+    else issues.push(["err", "追加先の再生リストが選ばれていません。"]);
+  }
+  if (!issues.length) issues.push(["ok", "問題は見つかりませんでした。"]);
+
+  const ic = { ok: "✓", warn: "⚠", err: "✕", info: "ℹ" };
+  $("#checkBox").innerHTML = issues.map((x) =>
+    '<div class="banner ' + x[0] + '"><span class="ic">' + ic[x[0]] + '</span><div>' + esc(x[1]) + '</div></div>'
+  ).join("");
+
+  const blocked = issues.some((x) => x[0] === "err");
+  $("#btnRun").disabled = blocked || running;
+  return !blocked;
+}
+
+function renderRuns() {
+  const wrap = $("#runList");
+  if (!state.runs.length) {
+    wrap.innerHTML = '<div class="empty"><div class="empty-art">空</div><div>まだ実行の記録がありません。</div></div>';
+  } else {
+    wrap.innerHTML = state.runs.map((r) => {
+      const ok = r.items.filter((i) => i.videoId && !i.deleted).length;
+      const ng = r.items.filter((i) => !i.videoId).length;
+      const del = r.items.filter((i) => i.deleted).length;
+      return '<div class="run-card" data-run="' + r.id + '">' +
+        '<div class="run-top"><div class="rt">' + esc(r.tourney || "（大会名なし）") + '</div>' +
+          '<div class="rd">' + fmtStamp(r.at) + '</div></div>' +
+        '<div class="run-meta">' +
+          '<span class="badge green">成功 ' + ok + '</span> ' +
+          (ng ? '<span class="badge red">失敗 ' + ng + '</span> ' : "") +
+          (del ? '<span class="badge gray">削除済 ' + del + '</span> ' : "") +
+          (r.playlistId ? '<br><a href="https://www.youtube.com/playlist?list=' + esc(r.playlistId) + '" target="_blank" rel="noopener">再生リストを開く</a>' : "") +
+        '</div>' +
+        '<div class="run-actions">' +
+          (ng ? '<button class="btn btn-ghost btn-tiny" data-act="retry">失敗分を再実行</button>' : "") +
+          (ok ? '<button class="btn btn-danger btn-tiny" data-act="delete">配信枠をまとめて削除</button>' : "") +
+          '<button class="btn btn-ghost btn-tiny" data-act="csv">CSVで書き出す</button>' +
+          '<button class="btn btn-ghost btn-tiny" data-act="forget">記録を消す</button>' +
+        '</div>' +
+      '</div>';
+    }).join("");
+  }
+  $("#runCount").textContent = state.runs.length + "件";
+  const badge = $("#badgeRuns");
+  badge.textContent = state.runs.length;
+  badge.classList.toggle("show", state.runs.length > 0);
+}
+
+function renderTeams() {
+  const teams = state.cfg.teams || [];
+  $("#teamCount").textContent = teams.length + "チーム";
+  $("#teamList").innerHTML = teams.map((t) => '<option value="' + esc(t) + '"></option>').join("");
+  const my = state.cfg.myTeam || "";
+  const known = teams.indexOf(my) >= 0;
+  $("#fMyTeam").innerHTML = '<option value="">（未設定）</option>' +
+    (my && !known ? '<option value="' + esc(my) + '">' + esc(my) + '（名簿にありません）</option>' : "") +
+    teams.map((t) => '<option value="' + esc(t) + '">' + esc(t) + '</option>').join("");
+  $("#fMyTeam").value = my;
+}
+
+function renderThumb() {
+  const prev = $("#thumbPrev"), meta = $("#thumbMeta");
+  if (state.thumb) {
+    prev.style.backgroundImage = "url(" + state.thumb.dataUrl + ")";
+    prev.textContent = "";
+    meta.innerHTML = '<div class="fn">' + esc(state.thumb.name) + '</div>' +
+      '<div>' + Math.round(state.thumb.size / 1024) + ' KB ・ ' + esc(state.thumb.type) + '</div>' +
+      '<div>作成した全ての配信枠に設定します。</div>';
+  } else {
+    prev.style.backgroundImage = "";
+    prev.textContent = "未設定";
+    meta.innerHTML = '<div class="fn">画像なし</div>' +
+      '<div>設定しない場合、サムネイルの一括設定はスキップされます。</div>';
+  }
+}
+
+function renderConfig() {
+  const c = state.cfg;
+  $("#fTourney").value = c.tourney;
+  $("#fDate").value = c.date;
+  $("#fStart").value = c.startTime;
+  $("#fInterval").value = c.interval;
+  $("#fPrivacy").value = c.privacy;
+  $("#fTitleTpl").value = c.titleTpl;
+  $("#fDescTpl").value = c.descTpl;
+  $("#fPlMode").value = c.plMode;
+  $("#fPlTitle").value = c.plTitle;
+  $("#fQualCount").value = c.qualCount;
+  $("#fQualTpl").value = c.qualTpl;
+  $("#fLatency").value = c.latency;
+  $("#fClientId").value = c.clientId;
+  $("#fTeams").value = (c.teams || []).join("\n");
+  renderTeams();
+  setToggle($("#tgKids"), c.madeForKids);
+  setToggle($("#tgAutoStart"), c.autoStart);
+  setToggle($("#tgAutoStop"), c.autoStop);
+  setToggle($("#tgMonitor"), c.monitor);
+  syncPlaylistFields();
+  $("#finalRounds").innerHTML = FINAL_ROUNDS.map((r) =>
+    '<label style="display:inline-flex;align-items:center;gap:5px;margin:0 12px 6px 0;font-size:14px">' +
+    '<input type="checkbox" data-final="' + r.key + '"' + (c.finals[r.key] ? " checked" : "") +
+    ' style="width:18px;height:18px;min-height:0;accent-color:var(--shu)">' + r.label + '</label>'
+  ).join("");
+  document.documentElement.dataset.theme = c.theme;
+  renderThumb();
+}
+function setToggle(el, on) {
+  el.classList.toggle("on", !!on);
+  el.setAttribute("aria-checked", on ? "true" : "false");
+}
+function syncPlaylistFields() {
+  const mode = state.cfg.plMode;
+  $("#wrapPlTitle").hidden = mode !== "new";
+  $("#wrapPlPick").hidden = mode !== "existing";
+}
+
+/* =========================================================================
+   実行
+   ========================================================================= */
+function logRow(icon, cls, title, msg, link) {
+  const li = document.createElement("li");
+  li.className = "log-item";
+  li.innerHTML = '<span class="log-ic ' + cls + '">' + icon + '</span>' +
+    '<div class="log-body"><div class="t">' + esc(title) + '</div>' +
+    (msg ? '<div class="m' + (cls === "ng" ? " err" : "") + '">' + esc(msg) + '</div>' : "") +
+    (link ? '<a href="' + esc(link) + '" target="_blank" rel="noopener">YouTubeで開く</a>' : "") +
+    '</div>';
+  $("#logList").appendChild(li);
+  li.scrollIntoView({ block: "nearest" });
+  return li;
+}
+function updateLogRow(li, icon, cls, msg, link) {
+  const ic = li.querySelector(".log-ic");
+  ic.textContent = icon;
+  ic.className = "log-ic " + cls;
+  const body = li.querySelector(".log-body");
+  const old = body.querySelector(".m");
+  if (old) old.remove();
+  if (msg) {
+    const d = document.createElement("div");
+    d.className = "m" + (cls === "ng" ? " err" : "");
+    d.textContent = msg;
+    body.appendChild(d);
+  }
+  if (link && !body.querySelector("a")) {
+    const a = document.createElement("a");
+    a.href = link; a.target = "_blank"; a.rel = "noopener";
+    a.textContent = "YouTubeで開く";
+    body.appendChild(a);
+  }
+}
+function setProgress(done, total) {
+  $("#progWrap").hidden = false;
+  $("#progText").hidden = false;
+  $("#progBar").style.width = (total ? (done / total) * 100 : 0) + "%";
+  $("#progText").textContent = done + " / " + total;
+}
+
+function buildJobs() {
+  return activeMatches().map((m) => {
+    const idx = state.matches.indexOf(m);
+    const d = parseLocalInput(m.at);
+    return {
+      title: buildTitle(m, idx),
+      description: buildDesc(m, idx),
+      startISO: d ? d.toISOString() : null,
+      when: d ? fmtDate(d) + " " + fmtTime(d) : "時刻未設定"
+    };
+  });
+}
+
+async function runAll(jobs, existingRun) {
+  running = true;
+  aborted = false;
+  $("#btnRun").disabled = true;
+  $("#btnAbort").hidden = false;
+  $("#logCard").hidden = false;
+  $("#logList").innerHTML = "";
+  $("#logCount").textContent = "";
+
+  const cfg = state.cfg;
+  const run = existingRun || {
+    id: "r" + Date.now(),
+    at: Date.now(),
+    tourney: cfg.tourney,
+    playlistId: cfg.plMode === "existing" ? cfg.plId : "",
+    items: []
+  };
+  if (!existingRun) {
+    state.runs.unshift(run);
+    save();
+  }
+
+  const thumbBlob = state.thumb ? dataUrlToBlob(state.thumb.dataUrl) : null;
+  let done = 0, ok = 0, ng = 0;
+  setProgress(0, jobs.length);
+
+  try {
+    if (!tokenAlive()) await login(false);
+
+    // 再生リストの用意
+    if (cfg.plMode === "new" && !run.playlistId) {
+      const li = logRow("…", "run", "再生リストを作成中", "");
+      try {
+        const pl = await createPlaylist(cfg.plTitle.trim() || cfg.tourney.trim() || "配信予約", cfg.tourney);
+        run.playlistId = pl.id;
+        save();
+        updateLogRow(li, "✓", "ok", "作成しました", "https://www.youtube.com/playlist?list=" + pl.id);
+      } catch (e) {
+        updateLogRow(li, "✕", "ng", "再生リストを作れませんでした：" + e.message);
+      }
+    }
+
+    for (let i = 0; i < jobs.length; i++) {
+      if (aborted) { logRow("―", "run", "中断しました", "残り " + (jobs.length - i) + " 件"); break; }
+      const job = jobs[i];
+      const li = logRow("…", "run", job.title, job.when);
+      const item = { title: job.title, startISO: job.startISO, videoId: "", error: "", thumb: false, inPlaylist: false };
+
+      try {
+        const b = await createBroadcast(job.title, job.description, job.startISO);
+        item.videoId = b.id;
+        ok++;
+        const url = "https://www.youtube.com/watch?v=" + b.id;
+        updateLogRow(li, "✓", "ok", job.when + " に作成", url);
+
+        if (thumbBlob) {
+          try { await setThumbnail(b.id, thumbBlob); item.thumb = true; }
+          catch (e) { updateLogRow(li, "✓", "ok", job.when + " に作成（サムネ失敗：" + e.message + "）", url); }
+        }
+        if (cfg.plMode !== "none" && run.playlistId) {
+          try { await addToPlaylist(run.playlistId, b.id); item.inPlaylist = true; }
+          catch (e) { updateLogRow(li, "✓", "ok", job.when + " に作成（再生リスト追加失敗：" + e.message + "）", url); }
+        }
+      } catch (e) {
+        ng++;
+        item.error = e.message;
+        updateLogRow(li, "✕", "ng", e.message);
+        if (e.reason === "quotaExceeded") {
+          logRow("―", "ng", "クォータ超過のため中断しました", "残り " + (jobs.length - i - 1) + " 件は作成していません");
+          run.items.push(item);
+          save();
+          done++;
+          setProgress(done, jobs.length);
+          $("#logCount").textContent = "成功 " + ok + " / 失敗 " + ng;
+          break;
+        }
+      }
+
+      run.items.push(item);
+      save();
+      done++;
+      setProgress(done, jobs.length);
+      $("#logCount").textContent = "成功 " + ok + " / 失敗 " + ng;
+      await sleep(250); // 連打しすぎない
+    }
+  } catch (e) {
+    logRow("✕", "ng", "実行を開始できませんでした", e.message);
+  } finally {
+    running = false;
+    $("#btnAbort").hidden = true;
+    renderPreflight();
+    renderRuns();
+    save();
+    toast("完了：成功 " + ok + " 件 / 失敗 " + ng + " 件");
+  }
+}
+
+async function deleteRun(run) {
+  const targets = run.items.filter((i) => i.videoId && !i.deleted);
+  $("#logCard").hidden = false;
+  $("#logList").innerHTML = "";
+  $("#logCount").textContent = "";
+  showView("run");
+  let done = 0;
+  setProgress(0, targets.length);
+  try {
+    if (!tokenAlive()) await login(false);
+    for (const it of targets) {
+      const li = logRow("…", "run", it.title, "削除中");
+      try {
+        await deleteBroadcast(it.videoId);
+        it.deleted = true;
+        updateLogRow(li, "✓", "ok", "削除しました");
+      } catch (e) {
+        if (e.status === 404) { it.deleted = true; updateLogRow(li, "✓", "ok", "すでにありませんでした"); }
+        else updateLogRow(li, "✕", "ng", e.message);
+      }
+      done++;
+      setProgress(done, targets.length);
+      save();
+      await sleep(200);
+    }
+  } catch (e) {
+    logRow("✕", "ng", "削除を開始できませんでした", e.message);
+  }
+  renderRuns();
+  toast("削除処理が終わりました");
+}
+
+function runToCsv(run) {
+  const head = ["タイトル", "開始予定", "動画ID", "URL", "サムネ", "再生リスト", "状態", "エラー"];
+  const rows = run.items.map((i) => [
+    i.title,
+    i.startISO ? fmtStamp(new Date(i.startISO).getTime()) : "",
+    i.videoId,
+    i.videoId ? "https://www.youtube.com/watch?v=" + i.videoId : "",
+    i.thumb ? "○" : "",
+    i.inPlaylist ? "○" : "",
+    i.deleted ? "削除済" : (i.videoId ? "作成済" : "失敗"),
+    i.error || ""
+  ]);
+  const csv = [head].concat(rows)
+    .map((r) => r.map((c) => '"' + String(c).split('"').join('""') + '"').join(","))
+    .join("\r\n");
+  download("﻿" + csv, "broadcasts-" + run.id + ".csv", "text/csv");
+}
+function download(text, filename, mime) {
+  const blob = new Blob([text], { type: (mime || "text/plain") + ";charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* =========================================================================
+   モーダル
+   ========================================================================= */
+function openModal(sel) { $(sel).classList.add("show"); }
+function closeModal(sel) { $(sel).classList.remove("show"); }
+
+let confirmHandler = null;
+function askConfirm(title, bodyHtml, needType, onOk) {
+  $("#cfTitle").textContent = title;
+  $("#cfBody").innerHTML = bodyHtml;
+  $("#cfTypeWrap").hidden = !needType;
+  $("#cfType").value = "";
+  confirmHandler = onOk;
+  openModal("#mdConfirm");
+}
+
+function showDryRun() {
+  const jobs = buildJobs();
+  const cfg = state.cfg;
+  if (!jobs.length) { toast("対象の試合がありません"); return; }
+  let quota = jobs.length * COST.broadcast;
+  if (state.thumb) quota += jobs.length * COST.thumbnail;
+  if (cfg.plMode !== "none") quota += jobs.length * COST.playlistItem + (cfg.plMode === "new" ? COST.playlist : 0);
+
+  $("#dryBody").innerHTML =
+    '<div class="banner info"><span class="ic">🧪</span><div>APIは呼び出していません。実行するとこの内容が作られます。</div></div>' +
+    '<div class="stat-grid">' +
+      '<div class="stat-card"><div class="stat-num">' + jobs.length + '</div><div class="stat-label">配信枠</div></div>' +
+      '<div class="stat-card"><div class="stat-num">' + quota.toLocaleString() + '</div><div class="stat-label">消費クォータ</div></div>' +
+      '<div class="stat-card"><div class="stat-num">' + (state.thumb ? "有" : "無") + '</div><div class="stat-label">サムネ</div></div>' +
+    '</div>' +
+    '<ul class="log-list">' + jobs.map((j, i) =>
+      '<li class="log-item"><span class="log-ic">' + (i + 1) + '</span><div class="log-body">' +
+      '<div class="t">' + esc(j.title) + '</div>' +
+      '<div class="m">' + esc(j.when) + '　/　' + esc(j.startISO || "時刻なし") + '</div>' +
+      (j.description ? '<div class="m">' + esc(j.description.split("\n").join(" ⏎ ")) + '</div>' : "") +
+      '</div></li>'
+    ).join("") + '</ul>';
+  openModal("#mdDry");
+}
+
+/* =========================================================================
+   画面切替
+   ========================================================================= */
+function showView(name) {
+  $$(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + name));
+  $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === name));
+  if (name === "run") { renderAuth(); renderPreflight(); }
+  if (name === "history") renderRuns();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+/* =========================================================================
+   イベント配線
+   ========================================================================= */
+function bind() {
+  $$(".tab").forEach((t) => t.addEventListener("click", () => showView(t.dataset.view)));
+
+  // ---- 大会設定 ----
+  const bindText = (sel, key, transform) => {
+    const handler = (e) => {
+      state.cfg[key] = transform ? transform(e.target.value) : e.target.value;
+      save();
+      if (["titleTpl", "descTpl", "tourney"].includes(key)) renderMatches();
+      else renderPreflight();
+    };
+    // select は input を出さないブラウザがあるため change も拾う
+    $(sel).addEventListener("input", handler);
+    $(sel).addEventListener("change", handler);
+  };
+  bindText("#fTourney", "tourney");
+  bindText("#fTitleTpl", "titleTpl");
+  bindText("#fDescTpl", "descTpl");
+  bindText("#fPlTitle", "plTitle");
+  bindText("#fQualTpl", "qualTpl");
+  bindText("#fQualCount", "qualCount", (v) => Number(v) || 0);
+  bindText("#fInterval", "interval", (v) => Number(v) || 30);
+  bindText("#fPrivacy", "privacy");
+  bindText("#fLatency", "latency");
+
+  ["#fDate", "#fStart"].forEach((sel) => {
+    $(sel).addEventListener("change", (e) => {
+      state.cfg[sel === "#fDate" ? "date" : "startTime"] = e.target.value;
+      save();
+      if (state.matches.length && retime()) renderMatches();
+    });
+  });
+  $("#fPlMode").addEventListener("change", (e) => {
+    state.cfg.plMode = e.target.value;
+    save(); syncPlaylistFields(); renderPreflight();
+  });
+  $("#fPlId").addEventListener("change", (e) => { state.cfg.plId = e.target.value; save(); renderPreflight(); });
+  $("#btnPlReload").addEventListener("click", async () => {
+    try {
+      if (!tokenAlive()) await login(false);
+      const res = await listPlaylists();
+      const items = (res && res.items) || [];
+      $("#fPlId").innerHTML = '<option value="">選んでください</option>' +
+        items.map((p) => '<option value="' + esc(p.id) + '">' + esc(p.snippet.title) + '</option>').join("");
+      $("#fPlId").value = state.cfg.plId || "";
+      toast(items.length + "件の再生リストを読み込みました");
+    } catch (e) { toast(e.message); }
+  });
+
+  const bindToggle = (sel, key) => {
+    $(sel).addEventListener("click", () => {
+      state.cfg[key] = !state.cfg[key];
+      setToggle($(sel), state.cfg[key]);
+      save();
+    });
+  };
+  bindToggle("#tgKids", "madeForKids");
+  bindToggle("#tgAutoStart", "autoStart");
+  bindToggle("#tgAutoStop", "autoStop");
+  bindToggle("#tgMonitor", "monitor");
+
+  $("#btnPrismPreset").addEventListener("click", () => {
+    Object.assign(state.cfg, { autoStart: true, autoStop: false, monitor: false, latency: "" });
+    save(); renderConfig();
+    toast("自動開始ON・自動終了OFF・モニターOFFにしました");
+  });
+
+  $("#finalRounds").addEventListener("change", (e) => {
+    const k = e.target.dataset.final;
+    if (!k) return;
+    state.cfg.finals[k] = e.target.checked;
+    save();
+  });
+
+  // ---- チーム名簿 ----
+  $("#fTeams").addEventListener("input", (e) => {
+    state.cfg.teams = e.target.value.split(/\r?\n/).map((t) => t.trim()).filter(Boolean);
+    save(); renderTeams();
+  });
+  $("#fMyTeam").addEventListener("change", (e) => {
+    state.cfg.myTeam = e.target.value;
+    save(); renderMatches();
+  });
+
+  // ---- サムネイル ----
+  $("#btnThumbPick").addEventListener("click", () => $("#fThumb").click());
+  $("#btnThumbClear").addEventListener("click", () => {
+    state.thumb = null; save(); renderThumb(); renderPreflight(); toast("サムネイルを外しました");
+  });
+  $("#fThumb").addEventListener("change", (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    if (f.size > 2 * 1024 * 1024) { toast("2MBを超えています。圧縮してからお試しください。"); e.target.value = ""; return; }
+    const r = new FileReader();
+    r.onload = () => {
+      state.thumb = { name: f.name, type: f.type, size: f.size, dataUrl: r.result };
+      save(); renderThumb(); renderPreflight();
+      toast("サムネイルを設定しました");
+    };
+    r.readAsDataURL(f);
+    e.target.value = "";
+  });
+
+  // ---- 大会プリセット ----
+  $("#fPreset").innerHTML = presetOptions()
+    .map((o) => '<option value="' + o.v + '">' + esc(o.t) + '</option>').join("");
+  $("#tgPresetFinals").addEventListener("click", (e) => {
+    const on = !e.currentTarget.classList.contains("on");
+    setToggle(e.currentTarget, on);
+  });
+  $("#btnLoadPreset").addEventListener("click", () => {
+    const mode = $("#fPreset").value;
+    const withFinals = $("#tgPresetFinals").classList.contains("on");
+    const list = buildPreset(mode, withFinals);
+    if (!list) {
+      toast("大会設定で「自分のチーム」を名簿から選んでください");
+      showView("tourney");
+      return;
+    }
+    state.cfg.tourney = state.cfg.tourney.trim() || T2026.name;
+    state.cfg.date = T2026.date;
+    state.cfg.startTime = T2026.firstStart;
+    state.cfg.interval = T2026.interval;
+    state.matches = list;
+    save();
+    renderConfig();
+    renderMatches();
+    toast(list.length + "試合を取り込みました");
+  });
+
+  // ---- 試合表 ----
+  $("#btnGenerate").addEventListener("click", generateMatches);
+  $("#btnRetime").addEventListener("click", () => { if (retime()) { save(); renderMatches(); toast("時刻を振り直しました"); } });
+  $("#btnOnlyMine").addEventListener("click", () => {
+    if (!(state.cfg.myTeam || "").trim()) { toast("大会設定で「自分のチーム」を選んでください"); return; }
+    const n = state.matches.filter(isMine).length;
+    if (!n) { toast("自分のチームが入っている試合がありません"); return; }
+    state.matches.forEach((m) => { m.on = isMine(m); });
+    save(); renderMatches();
+    toast(n + "試合だけONにしました");
+  });
+  $("#btnAllOn").addEventListener("click", () => {
+    state.matches.forEach((m) => { m.on = true; });
+    save(); renderMatches();
+    toast("全部ONにしました");
+  });
+  $("#btnAddRow").addEventListener("click", () => {
+    const last = state.matches[state.matches.length - 1];
+    let at = "";
+    const step = Math.max(1, Number(state.cfg.interval) || 30);
+    if (last && parseLocalInput(last.at)) at = toLocalInput(new Date(parseLocalInput(last.at).getTime() + step * 60000));
+    else { const b = baseDate(); if (b) at = toLocalInput(b); }
+    state.matches.push(newMatch("", "", "", at));
+    save(); renderMatches();
+  });
+  $("#btnClearRows").addEventListener("click", () => {
+    if (!state.matches.length) return;
+    askConfirm("試合表を消す", "<p>試合表を全部消します。よろしいですか？</p>", false, () => {
+      state.matches = []; save(); renderMatches(); toast("消しました");
+    });
+  });
+  $("#btnPasteAdd").addEventListener("click", () => {
+    const add = parsePasted($("#fPaste").value);
+    if (!add.length) { toast("読み取れる行がありません"); return; }
+    state.matches = state.matches.concat(add);
+    retime(); save(); renderMatches();
+    toast(add.length + "試合を追記しました");
+  });
+  $("#btnPasteReplace").addEventListener("click", () => {
+    const list = parsePasted($("#fPaste").value);
+    if (!list.length) { toast("読み取れる行がありません"); return; }
+    state.matches = list;
+    retime(); save(); renderMatches();
+    toast(list.length + "試合に置きかえました");
+  });
+
+  $("#matchList").addEventListener("input", (e) => {
+    const li = e.target.closest(".match-item");
+    if (!li) return;
+    const m = state.matches.find((x) => x.id === li.dataset.id);
+    const f = e.target.dataset.f;
+    if (!m || !f) return;
+    m[f] = e.target.value;
+    save();
+    const pv = li.querySelector(".match-preview");
+    const idx = state.matches.indexOf(m);
+    const title = buildTitle(m, idx);
+    const d = parseLocalInput(m.at);
+    const past = d && d.getTime() < Date.now();
+    pv.innerHTML = '<span class="tt">' + (title ? esc(title) : "（タイトルが空です）") + '</span>' +
+      (title.length > 100 ? ' <span class="over">← ' + title.length + '文字（100文字まで）</span>' : "") +
+      (past ? ' <span class="over">← 過去の時刻</span>' : "");
+    // 入力中に再描画するとフォーカスが飛ぶので、★の表示だけその場で更新する
+    const mine = isMine(m);
+    const no = li.querySelector(".match-no");
+    li.classList.toggle("mine", mine);
+    no.classList.toggle("mine", mine);
+    no.textContent = mine ? "★" : String(idx + 1);
+    renderPreflight();
+  });
+  $("#matchList").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-act]");
+    if (!btn) return;
+    const li = btn.closest(".match-item");
+    const m = state.matches.find((x) => x.id === li.dataset.id);
+    if (!m) return;
+    if (btn.dataset.act === "del") state.matches = state.matches.filter((x) => x.id !== m.id);
+    if (btn.dataset.act === "toggle") m.on = !m.on;
+    save(); renderMatches();
+  });
+
+  // ---- 実行 ----
+  $("#btnDryRun").addEventListener("click", showDryRun);
+  $("#btnAbort").addEventListener("click", () => { aborted = true; toast("中断します…"); });
+  $("#btnRun").addEventListener("click", () => {
+    if (!renderPreflight()) { toast("事前チェックのエラーを解消してください"); return; }
+    const jobs = buildJobs();
+    askConfirm("配信予約を作成", "<p><b>" + jobs.length + "件</b>の配信枠をYouTubeに作成します。<br>" +
+      "公開設定：<b>" + ({ public: "公開", unlisted: "限定公開", private: "非公開" })[state.cfg.privacy] + "</b></p>" +
+      "<p class=\"muted\">作成後は「履歴」からまとめて削除できます。</p>", false,
+      () => runAll(jobs));
+  });
+
+  // ---- 履歴 ----
+  $("#runList").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-act]");
+    if (!btn) return;
+    const card = btn.closest("[data-run]");
+    const run = state.runs.find((r) => r.id === card.dataset.run);
+    if (!run) return;
+    const act = btn.dataset.act;
+
+    if (act === "csv") { runToCsv(run); return; }
+    if (act === "forget") {
+      askConfirm("記録を消す",
+        "<p>この実行の<b>記録だけ</b>を消します。YouTube上の配信枠は残ります。</p>", false, () => {
+          state.runs = state.runs.filter((r) => r.id !== run.id);
+          save(); renderRuns(); toast("記録を消しました");
+        });
+      return;
+    }
+    if (act === "delete") {
+      const n = run.items.filter((i) => i.videoId && !i.deleted).length;
+      askConfirm("配信枠をまとめて削除",
+        '<div class="banner err"><span class="ic">⚠</span><div>YouTube上の配信枠<b>' + n +
+        '件</b>を削除します。<b>元に戻せません。</b></div></div>', true, () => deleteRun(run));
+      return;
+    }
+    if (act === "retry") {
+      const failed = run.items.filter((i) => !i.videoId);
+      const jobs = failed.map((i) => ({
+        title: i.title,
+        description: "",
+        startISO: i.startISO,
+        when: i.startISO ? fmtStamp(new Date(i.startISO).getTime()) : "時刻未設定"
+      }));
+      askConfirm("失敗分を再実行",
+        "<p>失敗した<b>" + jobs.length + "件</b>をもう一度作成します。</p>" +
+        "<p class=\"muted\">説明文は再生成されません（タイトルと開始時刻のみ）。</p>", false, () => {
+          run.items = run.items.filter((i) => i.videoId);
+          save();
+          showView("run");
+          runAll(jobs, run);
+        });
+    }
+  });
+
+  // ---- モーダル ----
+  $("#btnSettings").addEventListener("click", () => openModal("#mdSettings"));
+  $("#btnHelp").addEventListener("click", () => openModal("#mdHelp"));
+  $$("[data-close]").forEach((b) => b.addEventListener("click", (e) => {
+    e.target.closest(".modal-bg").classList.remove("show");
+  }));
+  $$(".modal-bg").forEach((bg) => bg.addEventListener("click", (e) => {
+    if (e.target === bg) bg.classList.remove("show");
+  }));
+  $("#cfOk").addEventListener("click", () => {
+    if (!$("#cfTypeWrap").hidden && $("#cfType").value.trim() !== "削除") {
+      toast("「削除」と入力してください"); return;
+    }
+    closeModal("#mdConfirm");
+    const h = confirmHandler;
+    confirmHandler = null;
+    if (h) h();
+  });
+
+  $("#btnSaveSettings").addEventListener("click", () => {
+    const id = $("#fClientId").value.trim();
+    state.cfg.clientId = id;
+    save();
+    accessToken = null; tokenExpiry = 0; tokenClient = null;
+    closeModal("#mdSettings");
+    renderAuth();
+    toast(id ? "保存しました" : "クライアントIDを空にしました");
+  });
+  $("#btnExport").addEventListener("click", () => {
+    const out = JSON.parse(JSON.stringify(state));
+    out.thumb = state.thumb ? { name: state.thumb.name, type: state.thumb.type, size: state.thumb.size } : null;
+    download(JSON.stringify(out, null, 2), "stream-scheduler-config.json", "application/json");
+  });
+  $("#btnResetAll").addEventListener("click", () => {
+    askConfirm("全部リセット", "<p>設定・試合表・履歴をすべて消します。<br>YouTube上の配信枠は残ります。</p>", false, () => {
+      localStorage.removeItem(LS_KEY);
+      state = defaults();
+      renderConfig(); renderMatches(); renderRuns(); renderAuth();
+      closeModal("#mdSettings");
+      toast("リセットしました");
+    });
+  });
+
+  $("#btnTheme").addEventListener("click", () => {
+    const order = ["auto", "light", "dark"];
+    const next = order[(order.indexOf(state.cfg.theme) + 1) % 3];
+    state.cfg.theme = next;
+    document.documentElement.dataset.theme = next;
+    save();
+    toast({ auto: "自動", light: "ライト", dark: "ダーク" }[next]);
+  });
+
+  window.addEventListener("beforeunload", (e) => {
+    if (running) { e.preventDefault(); e.returnValue = ""; }
+  });
+}
+
+/* =========================================================================
+   起動
+   ========================================================================= */
+// タブがヘッダーの下に潜らないよう、実測の高さを CSS 変数に流し込む
+function syncHeaderHeight() {
+  const h = document.querySelector(".header").offsetHeight;
+  document.documentElement.style.setProperty("--header-h", h + "px");
+}
+
+function init() {
+  load();
+  const origin = location.origin === "null" ? "（ファイルを直接開いた状態では使えません）" : location.origin;
+  $("#originHint").textContent = origin;
+  $("#originHint2").textContent = origin;
+  if (!state.cfg.date) state.cfg.date = toLocalInput(new Date()).slice(0, 10);
+  renderConfig();
+  bind();
+  renderMatches();
+  renderRuns();
+  renderAuth();
+  syncHeaderHeight();
+  window.addEventListener("resize", syncHeaderHeight);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(syncHeaderHeight);
+  setInterval(() => { if (!running) renderAuth(); }, 60000);
+}
+document.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>
