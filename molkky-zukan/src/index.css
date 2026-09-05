@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-ink-50 font-gothic text-ink-900 antialiased dark:bg-ink-950 dark:text-ink-50;
+    /* iOSのホーム画面追加時に、下端の余白を確保する */
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  /* 入力欄のズームを防ぐ */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
