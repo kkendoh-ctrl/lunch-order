@@ -108,3 +108,10 @@
 ## ライセンス
 
 MIT
+
+## 📖 全国モルッカー図鑑（別アプリ）
+
+モルック競技者のカードを地方ごとに集める PWA。このリポジトリの `molkky-zukan/` 配下にあります。
+
+- 技術スタックが別（Vite + React + TypeScript / Supabase / Cloudflare Pages）なので、上の2ページとは独立しています。
+- セットアップとデプロイ手順は [`molkky-zukan/README.md`](molkky-zukan/README.md) を参照してください。
