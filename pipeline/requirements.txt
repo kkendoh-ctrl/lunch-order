@@ -1,0 +1,12 @@
+# PyTorch は README.md 参照(先に CPU 版を別 index で入れる)
+# 3.3+ で initial_prompt が transcribe() から load_model(asr_options=...) に移動
+whisperx>=3.3.0
+pydub>=0.25.1
+python-dotenv>=1.0.0
+watchdog>=4.0.0
+click>=8.1.0
+anthropic>=0.92.0
+pyyaml>=6.0
+# import コマンドで Voice Memos の m4a メタデータから録音日時を取り出す用
+# (無くても mtime fallback で動くので必須ではない)
+mutagen>=1.47.0
